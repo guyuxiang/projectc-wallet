@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/models"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
 	"gorm.io/gorm"
 )
 

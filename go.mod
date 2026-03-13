@@ -1,4 +1,4 @@
-module github.com/guyuxiang/projectc-wallet
+module github.com/guyuxiang/projectc-custodial-wallet
 
 go 1.22.2
 

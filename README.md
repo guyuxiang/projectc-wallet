@@ -1,10 +1,10 @@
-projectc-wallet
+projectc-custodial-wallet
 ===================
 
 
 ## Framework
 
-`projectc-wallet`框架的核心就是pkg包，下面主要针对该包结构进行描述：
+`projectc-custodial-wallet`框架的核心就是pkg包，下面主要针对该包结构进行描述：
 
 ```bash
 pkg/
@@ -45,10 +45,10 @@ pkg/
 
 * step1 - 替换项目名称
 
-  实际使用中，通常需要将`projectc-wallet`替换成业务需要的后台server名称，可以执行如下命令：
+  实际使用中，通常需要将`projectc-custodial-wallet`替换成业务需要的后台server名称，可以执行如下命令：
 
   ```bash
-  $ grep -rl projectc-wallet . | xargs sed -i 's/projectc-wallet/youapiserver/g' 
+  $ grep -rl projectc-custodial-wallet . | xargs sed -i 's/projectc-custodial-wallet/youapiserver/g' 
   ```
   
 * step2 - 开发业务controller和service
@@ -83,10 +83,10 @@ pkg/
   # generated image
   $ make dockerfiles.build
   # retag and push to your docker registry
-  $ docker tag guyuxiang/projectc-wallet:v0.1.0 xxx/guyuxiang/projectc-wallet:v0.1.0
-  $ docker push xxx/guyuxiang/projectc-wallet:v0.1.0
+  $ docker tag guyuxiang/projectc-custodial-wallet:v0.1.0 xxx/guyuxiang/projectc-custodial-wallet:v0.1.0
+  $ docker push xxx/guyuxiang/projectc-custodial-wallet:v0.1.0
   # Update the deployment to use the built image name
-  $ sed -i 's|REPLACE_IMAGE|xxx/guyuxiang/projectc-wallet:v0.1.0|g' hack/deploy/deployment.yaml
+  $ sed -i 's|REPLACE_IMAGE|xxx/guyuxiang/projectc-custodial-wallet:v0.1.0|g' hack/deploy/deployment.yaml
   # create service 
   $ kubectl apply -f hack/deploy/service.yaml
   # create deployment

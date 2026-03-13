@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: projectc-wallet
+  name: projectc-custodial-wallet
   labels:
-    app: projectc-wallet
+    app: projectc-custodial-wallet
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: projectc-wallet
+      app: projectc-custodial-wallet
   template:
     metadata:
       labels:
-        app: projectc-wallet
+        app: projectc-custodial-wallet
     spec:
       containers:
-        - name: projectc-wallet
+        - name: projectc-custodial-wallet
           image: REPLACE_IMAGE
           ports:
             - containerPort: 8081

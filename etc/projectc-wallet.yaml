@@ -18,10 +18,10 @@ rabbitmq:
   exchange: "tx_callback_fanout_exchange"
   cancelExchange: "tx_callback_cancel_fanout_exchange"
   exchangeType: "fanout"
-  queue: "projectc-wallet.queue"
+  queue: "projectc-custodial-wallet.queue"
   routingKey: ""
 signature:
-  appId: "projectc-wallet"
+  appId: "projectc-custodial-wallet"
   appSecret: "replace-me"
   maxSkewMillis: 300000
 kms:

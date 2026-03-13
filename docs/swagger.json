@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "This is a projectc-wallet.",
-        "title": "Swagger projectc-wallet",
+        "description": "This is a projectc-custodial-wallet.",
+        "title": "Swagger projectc-custodial-wallet",
         "contact": {
             "name": "guyuxiang",
             "url": "https://guyuxiang.github.io",

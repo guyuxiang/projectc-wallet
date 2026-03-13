@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
-	"github.com/guyuxiang/projectc-wallet/pkg/models"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
 )
 
 func RequestSignatureMiddleware() gin.HandlerFunc {

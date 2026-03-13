@@ -63,7 +63,7 @@ var flagsOpts = []flagOpt{
 	},
 	{
 		optName:         FLAG_KEY_RABBIT_QUEUE,
-		optDefaultValue: "projectc-wallet.queue",
+		optDefaultValue: "projectc-custodial-wallet.queue",
 		optUsage:        "rabbitmq queue",
 	},
 	{

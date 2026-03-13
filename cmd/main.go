@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
-	"github.com/guyuxiang/projectc-wallet/pkg/log"
-	"github.com/guyuxiang/projectc-wallet/pkg/mysql"
-	"github.com/guyuxiang/projectc-wallet/pkg/rabbitmq"
-	"github.com/guyuxiang/projectc-wallet/pkg/route"
-	"github.com/guyuxiang/projectc-wallet/pkg/service"
-	"github.com/guyuxiang/projectc-wallet/pkg/util"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/mysql"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/rabbitmq"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/route"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/service"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/util"
 )
 
 func main() {

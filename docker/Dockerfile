@@ -3,9 +3,9 @@ FROM docker.m.daocloud.io/golang:1.24
 
 RUN apk add --update make
 
-WORKDIR /go/src/github.com/guyuxiang/projectc-wallet
+WORKDIR /go/src/github.com/guyuxiang/projectc-custodial-wallet
 
-COPY . /go/src/github.com/guyuxiang/projectc-wallet
+COPY . /go/src/github.com/guyuxiang/projectc-custodial-wallet
 
 ENV CGO_ENABLED 0
 ENV GOOS linux
@@ -14,7 +14,7 @@ ENV GO111MODULE=on
 ENV TIMEZONE "Asia/Shanghai"
 
 RUN make src.build
-RUN mv build/pkg/cmd/projectc-wallet/projectc-wallet /go/bin
+RUN mv build/pkg/cmd/projectc-custodial-wallet/projectc-custodial-wallet /go/bin
 
 # Production stage
 FROM alpine:3.9
@@ -25,8 +25,8 @@ LABEL maintainer="guyuxiang <guyuxiang@qq.com>"
 # copy the go binaries from the building stage
 COPY --from=0 /go/bin /go/bin
 
-COPY etc/projectc-wallet.yaml /etc/projectc-wallet/projectc-wallet.yaml
+COPY etc/projectc-custodial-wallet.yaml /etc/projectc-custodial-wallet/projectc-custodial-wallet.yaml
 
 EXPOSE 80
 
-ENTRYPOINT ["./projectc-wallet"]
+ENTRYPOINT ["./projectc-custodial-wallet"]

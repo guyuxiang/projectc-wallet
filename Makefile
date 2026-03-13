@@ -2,7 +2,7 @@
 SERVER_VERSION = v0.1.0
 ## Folder content generated files
 BUILD_FOLDER = ./build
-PROJECT_URL  = github.com/guyuxiang/projectc-wallet
+PROJECT_URL  = github.com/guyuxiang/projectc-custodial-wallet
 ## command
 GO           = go
 GO_VENDOR    = go mod
@@ -41,15 +41,15 @@ download:
 
 .PHONY: src.build
 src.build:
-	$(MKDIR_P) $(BUILD_FOLDER)/pkg/cmd/projectc-wallet/
-	GO111MODULE=on $(GO) build -mod=mod -v -o $(BUILD_FOLDER)/pkg/cmd/projectc-wallet/projectc-wallet \
+	$(MKDIR_P) $(BUILD_FOLDER)/pkg/cmd/projectc-custodial-wallet/
+	GO111MODULE=on $(GO) build -mod=mod -v -o $(BUILD_FOLDER)/pkg/cmd/projectc-custodial-wallet/projectc-custodial-wallet \
 	./cmd/...
 
 ## dockerfiles/ ########################################
 
 .PHONY: dockerfiles.build
 dockerfiles.build:
-	docker build --no-cache --rm --tag guyuxiang/projectc-wallet:$(SERVER_VERSION) -f ./docker/Dockerfile .
+	docker build --no-cache --rm --tag guyuxiang/projectc-custodial-wallet:$(SERVER_VERSION) -f ./docker/Dockerfile .
 
 ## git tag version ########################################
 

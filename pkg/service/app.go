@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
-	"github.com/guyuxiang/projectc-wallet/pkg/store"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/store"
 	"gorm.io/gorm"
 )
 

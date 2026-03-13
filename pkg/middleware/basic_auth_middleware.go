@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
 )
 
 func BasicAuthMiddleware() gin.HandlerFunc {

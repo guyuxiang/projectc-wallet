@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

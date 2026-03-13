@@ -15,11 +15,11 @@ info:
     email: guyuxiang@qq.com
     name: guyuxiang
     url: https://guyuxiang.github.io
-  description: This is a projectc-wallet.
+  description: This is a projectc-custodial-wallet.
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  title: Swagger projectc-wallet
+  title: Swagger projectc-custodial-wallet
   version: 0.1.0
 paths:
   /todo/get:

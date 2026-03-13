@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
-	"github.com/guyuxiang/projectc-wallet/pkg/log"
-	"github.com/guyuxiang/projectc-wallet/pkg/models"
-	"github.com/guyuxiang/projectc-wallet/pkg/store"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/store"
 )
 
 type WalletService interface {

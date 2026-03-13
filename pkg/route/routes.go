@@ -4,16 +4,16 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/guyuxiang/projectc-wallet/docs"
-	"github.com/guyuxiang/projectc-wallet/pkg/controller"
-	"github.com/guyuxiang/projectc-wallet/pkg/log"
+	_ "github.com/guyuxiang/projectc-custodial-wallet/docs"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/controller"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/swaggo/gin-swagger/swaggerFiles"
 )
 
-// @title Swagger projectc-wallet
+// @title Swagger projectc-custodial-wallet
 // @version 0.1.0
-// @description This is a projectc-wallet.
+// @description This is a projectc-custodial-wallet.
 // @contact.name guyuxiang
 // @contact.url https://guyuxiang.github.io
 // @contact.email guyuxiang@qq.com
@@ -30,7 +30,7 @@ func InstallRoutes(r *gin.Engine) {
 	// a ping api test
 	r.GET("/ping", controller.Ping)
 
-	// get projectc-wallet version
+	// get projectc-custodial-wallet version
 	r.GET("/version", controller.Version)
 
 	// config reload

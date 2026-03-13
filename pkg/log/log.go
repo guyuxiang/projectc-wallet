@@ -1,7 +1,7 @@
 package log
 
 import (
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"runtime"

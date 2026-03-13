@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/config"
-	"github.com/guyuxiang/projectc-wallet/pkg/log"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
 	"github.com/streadway/amqp"
 )
 

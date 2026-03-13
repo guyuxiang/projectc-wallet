@@ -1,6 +1,6 @@
 package service
 
-import "github.com/guyuxiang/projectc-wallet/pkg/models"
+import "github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
 
 type AppError struct {
 	Code    string

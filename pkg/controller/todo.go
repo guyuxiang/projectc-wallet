@@ -2,8 +2,8 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/guyuxiang/projectc-wallet/pkg/models"
-	"github.com/guyuxiang/projectc-wallet/pkg/service"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/service"
 )
 
 type ToDoController interface {

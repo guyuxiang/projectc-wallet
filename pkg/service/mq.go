@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/guyuxiang/projectc-wallet/pkg/log"
-	"github.com/guyuxiang/projectc-wallet/pkg/models"
-	"github.com/guyuxiang/projectc-wallet/pkg/rabbitmq"
-	"github.com/guyuxiang/projectc-wallet/pkg/store"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/models"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/rabbitmq"
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/store"
 )
 
 type txCallbackMessage struct {
@@ -31,11 +31,11 @@ func (s *walletService) StartMQConsumer() error {
 	var err error
 	s.mqOnce.Do(func() {
 		var deliveries <-chan rabbitmq.Delivery
-		deliveries, err = rabbitmq.ConsumeWalletCallbacks("projectc-wallet-consumer")
+		deliveries, err = rabbitmq.ConsumeWalletCallbacks("projectc-custodial-wallet-consumer")
 		if err != nil {
 			return
 		}
-		log.Infof("wallet mq consumer started consumer=%s", "projectc-wallet-consumer")
+		log.Infof("wallet mq consumer started consumer=%s", "projectc-custodial-wallet-consumer")
 		go func() {
 			for delivery := range deliveries {
 				log.Infof("wallet mq delivery received type=%s body=%s", delivery.Type, string(delivery.Body))
