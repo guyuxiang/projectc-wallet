@@ -8,8 +8,8 @@ COPY . /go/src/github.com/guyuxiang/projectc-custodial-wallet
 ENV CGO_ENABLED 0
 ENV GOOS linux
 ENV GO111MODULE=on
-
 ENV TIMEZONE "Asia/Shanghai"
+ENV GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
 
 RUN make src.build
 RUN mv build/pkg/cmd/projectc-custodial-wallet/projectc-custodial-wallet /go/bin
