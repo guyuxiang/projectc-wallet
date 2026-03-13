@@ -3,8 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -16,6 +14,7 @@ import (
 	solana "github.com/gagliardetto/solana-go"
 	associatedtokenaccount "github.com/gagliardetto/solana-go/programs/associated-token-account"
 	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
+	systemprog "github.com/gagliardetto/solana-go/programs/system"
 	tokenprog "github.com/gagliardetto/solana-go/programs/token"
 )
 
@@ -68,113 +67,45 @@ func decodeBase58(input string) ([]byte, error) {
 	return output, nil
 }
 
-type message struct {
-	NumRequiredSignatures byte
-	NumReadonlySigned     byte
-	NumReadonlyUnsigned   byte
-	AccountKeys           [][]byte
-	RecentBlockhash       []byte
-	Instructions          []compiledInstruction
-}
-
-type compiledInstruction struct {
-	ProgramIndex byte
-	AccountIdxs  []byte
-	Data         []byte
-}
-
 func buildUnsignedNativeTransferTx(fromAddress string, toAddress string, recentBlockhash string, lamports uint64, computeUnitPrice uint64) (string, error) {
-	fromBytes, err := decodeBase58(fromAddress)
-	if err != nil || len(fromBytes) != 32 {
+	from, err := solana.PublicKeyFromBase58(fromAddress)
+	if err != nil {
 		return "", fmt.Errorf("decode from address: %w", err)
 	}
-	toBytes, err := decodeBase58(toAddress)
-	if err != nil || len(toBytes) != 32 {
+	to, err := solana.PublicKeyFromBase58(toAddress)
+	if err != nil {
 		return "", fmt.Errorf("decode to address: %w", err)
 	}
-	systemProgramBytes, _ := decodeBase58(systemProgramAddress)
-
-	accountKeys := [][]byte{fromBytes, toBytes, systemProgramBytes}
-	instructions := make([]compiledInstruction, 0, 2)
-	readonlyUnsigned := byte(1)
-
-	if computeUnitPrice > 0 {
-		computeBudgetBytes, _ := decodeBase58(computeBudgetProgramAddress)
-		accountKeys = append(accountKeys, computeBudgetBytes)
-		readonlyUnsigned = 2
-
-		data := make([]byte, 9)
-		data[0] = 3
-		binary.LittleEndian.PutUint64(data[1:], computeUnitPrice)
-		instructions = append(instructions, compiledInstruction{
-			ProgramIndex: 3,
-			AccountIdxs:  []byte{},
-			Data:         data,
-		})
-	}
-
-	transferData := make([]byte, 12)
-	binary.LittleEndian.PutUint32(transferData[:4], 2)
-	binary.LittleEndian.PutUint64(transferData[4:], lamports)
-	instructions = append(instructions, compiledInstruction{
-		ProgramIndex: 2,
-		AccountIdxs:  []byte{0, 1},
-		Data:         transferData,
-	})
-
-	blockhashBytes, err := decodeBase58(recentBlockhash)
-	if err != nil || len(blockhashBytes) != 32 {
+	blockhash, err := solana.HashFromBase58(recentBlockhash)
+	if err != nil {
 		return "", fmt.Errorf("decode recent blockhash: %w", err)
 	}
 
-	msg := encodeMessage(message{
-		NumRequiredSignatures: 1,
-		NumReadonlySigned:     0,
-		NumReadonlyUnsigned:   readonlyUnsigned,
-		AccountKeys:           accountKeys,
-		RecentBlockhash:       blockhashBytes,
-		Instructions:          instructions,
-	})
+	instructions := make([]solana.Instruction, 0, 2)
 
-	txBytes := encodeCompactU16(1)
-	txBytes = append(txBytes, make([]byte, 64)...)
-	txBytes = append(txBytes, msg...)
-	return base64.StdEncoding.EncodeToString(txBytes), nil
-}
-
-func encodeMessage(msg message) []byte {
-	out := []byte{msg.NumRequiredSignatures, msg.NumReadonlySigned, msg.NumReadonlyUnsigned}
-	out = append(out, encodeCompactU16(len(msg.AccountKeys))...)
-	for _, key := range msg.AccountKeys {
-		out = append(out, key...)
-	}
-	out = append(out, msg.RecentBlockhash...)
-	out = append(out, encodeCompactU16(len(msg.Instructions))...)
-	for _, ix := range msg.Instructions {
-		out = append(out, ix.ProgramIndex)
-		out = append(out, encodeCompactU16(len(ix.AccountIdxs))...)
-		out = append(out, ix.AccountIdxs...)
-		out = append(out, encodeCompactU16(len(ix.Data))...)
-		out = append(out, ix.Data...)
-	}
-	return out
-}
-
-func encodeCompactU16(v int) []byte {
-	if v < 0 {
-		return []byte{0}
-	}
-	out := make([]byte, 0, 3)
-	value := uint32(v)
-	for {
-		elem := byte(value & 0x7f)
-		value >>= 7
-		if value == 0 {
-			out = append(out, elem)
-			return out
+	if computeUnitPrice > 0 {
+		ix, err := computebudget.NewSetComputeUnitPriceInstruction(computeUnitPrice).ValidateAndBuild()
+		if err != nil {
+			return "", err
 		}
-		out = append(out, elem|0x80)
+		instructions = append(instructions, ix)
 	}
+
+	ix, err := systemprog.NewTransferInstruction(
+		lamports,
+		from,
+		to,
+	).ValidateAndBuild()
+	if err != nil {
+		return "", err
+	}
+	instructions = append(instructions, ix)
+
+	tx, err := solana.NewTransaction(instructions, blockhash, solana.TransactionPayer(from))
+	if err != nil {
+		return "", err
+	}
+	return tx.ToBase64()
 }
 
 func validateSolanaAddress(address string) bool {

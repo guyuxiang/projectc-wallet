@@ -13,26 +13,19 @@ import (
 )
 
 type txCallbackMessage struct {
-	Tx struct {
-		Code        string `json:"code"`
-		NetworkCode string `json:"networkCode"`
-		BlockNumber uint64 `json:"blockNumber"`
-		Timestamp   int64  `json:"timestamp"`
-		Status      string `json:"status"`
-		From        string `json:"from"`
-		To          string `json:"to"`
-		Amount      string `json:"amount"`
-		Fee         string `json:"fee"`
-	} `json:"tx"`
-	TxEvents []struct {
-		Type string                 `json:"type"`
-		Data map[string]interface{} `json:"data"`
-	} `json:"txEvents"`
+	Tx       models.ConnectorChainTx      `json:"tx"`
+	TxEvents []models.ConnectorChainEvent `json:"txEvents"`
 }
 
 type txRollbackMessage struct {
-	TxCode string `json:"txCode"`
+	TxCode      string `json:"txCode"`
+	NetworkCode string `json:"networkCode"`
 }
+
+const (
+	connectorCallbackTypeTx       = "TX"
+	connectorCallbackTypeRollback = "ROLLBACK"
+)
 
 func (s *walletService) StartMQConsumer() error {
 	var err error
@@ -42,8 +35,10 @@ func (s *walletService) StartMQConsumer() error {
 		if err != nil {
 			return
 		}
+		log.Infof("wallet mq consumer started consumer=%s", "projectc-wallet-consumer")
 		go func() {
 			for delivery := range deliveries {
+				log.Infof("wallet mq delivery received type=%s body=%s", delivery.Type, string(delivery.Body))
 				if handleErr := s.handleMQDelivery(delivery); handleErr != nil {
 					log.Warningf("handle mq delivery failed type=%s err=%v", delivery.Type, handleErr)
 					_ = delivery.Nack(false, true)
@@ -73,12 +68,28 @@ func (s *walletService) handleMQDelivery(delivery rabbitmq.Delivery) error {
 	}
 }
 
+func (s *walletService) HandleTxCallback(ctx context.Context, req models.ConnectorTxCallbackRequest) error {
+	return s.handleTxCallback(txCallbackMessage(req))
+}
+
+func (s *walletService) HandleRollbackCallback(ctx context.Context, req models.ConnectorTxRollbackRequest) error {
+	return s.handleRollback(txRollbackMessage(req))
+}
+
 func (s *walletService) handleTxCallback(msg txCallbackMessage) error {
 	if msg.Tx.Code == "" || strings.ToLower(msg.Tx.NetworkCode) != s.networkCode() {
+		log.Infof("ignore mq tx callback code=%s network=%s", msg.Tx.Code, msg.Tx.NetworkCode)
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	if _, err := s.store.GetConnectorCallback(ctx, msg.Tx.Code, connectorCallbackTypeTx); err == nil {
+		log.Infof("ignore duplicate tx callback txCode=%s", msg.Tx.Code)
+		return nil
+	} else if err != nil && !store.IsNotFound(err) {
+		return err
+	}
 
 	rows, err := s.store.ListTransactionsByTxHash(ctx, msg.Tx.Code)
 	if err != nil {
@@ -111,7 +122,16 @@ func (s *walletService) handleTxCallback(msg txCallbackMessage) error {
 	if err := s.handleIncomingNative(ctx, msg); err != nil {
 		return err
 	}
-	return s.handleIncomingToken(ctx, msg)
+	if err := s.handleIncomingToken(ctx, msg); err != nil {
+		return err
+	}
+	if err := s.store.CreateConnectorCallback(ctx, &models.ConnectorCallbackEntity{
+		TxCode:       msg.Tx.Code,
+		CallbackType: connectorCallbackTypeTx,
+	}); err != nil && !isDuplicateCallbackError(err) {
+		return err
+	}
+	return nil
 }
 
 func (s *walletService) handleIncomingNative(ctx context.Context, msg txCallbackMessage) error {
@@ -121,11 +141,13 @@ func (s *walletService) handleIncomingNative(ctx context.Context, msg txCallback
 	wallet, err := s.store.GetWalletByAddress(ctx, s.networkCode(), msg.Tx.To)
 	if err != nil {
 		if store.IsNotFound(err) {
+			log.Infof("ignore native incoming txHash=%s to=%s: wallet not found", msg.Tx.Code, msg.Tx.To)
 			return nil
 		}
 		return err
 	}
 	if msg.Tx.Amount == "" || msg.Tx.Amount == "0" {
+		log.Infof("ignore native incoming txHash=%s to=%s: zero amount", msg.Tx.Code, msg.Tx.To)
 		return nil
 	}
 	return s.upsertIncomingTransaction(ctx, wallet, msg.Tx.Code, models.TokenNative, s.nativeTokenSymbol(), msg.Tx.Amount, msg.Tx.From, msg.Tx.To, msg.Tx.Fee, msg.Tx.Timestamp, models.StatusSuccess)
@@ -143,6 +165,7 @@ func (s *walletService) handleIncomingToken(ctx context.Context, msg txCallbackM
 		wallet, err := s.store.GetWalletByAddress(ctx, s.networkCode(), toAddress)
 		if err != nil {
 			if store.IsNotFound(err) {
+				log.Infof("ignore token incoming txHash=%s to=%s: wallet not found", msg.Tx.Code, toAddress)
 				continue
 			}
 			return err
@@ -185,6 +208,7 @@ func (s *walletService) upsertIncomingTransaction(ctx context.Context, wallet *m
 
 	tx := &models.TransactionEntity{
 		TransactionNo: generateID("T"),
+		RequestNo:     generateID("IR"),
 		Direction:     models.DirectionIn,
 		WalletNo:      wallet.WalletNo,
 		Network:       wallet.Network,
@@ -212,6 +236,13 @@ func (s *walletService) handleRollback(msg txRollbackMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	if _, err := s.store.GetConnectorCallback(ctx, msg.TxCode, connectorCallbackTypeRollback); err == nil {
+		log.Infof("ignore duplicate rollback callback txCode=%s", msg.TxCode)
+		return nil
+	} else if err != nil && !store.IsNotFound(err) {
+		return err
+	}
+
 	rows, err := s.store.ListTransactionsByTxHash(ctx, msg.TxCode)
 	if err != nil {
 		return err
@@ -232,6 +263,12 @@ func (s *walletService) handleRollback(msg txRollbackMessage) error {
 			go s.notifyDeposit(context.Background(), &tx)
 		}
 	}
+	if err := s.store.CreateConnectorCallback(ctx, &models.ConnectorCallbackEntity{
+		TxCode:       msg.TxCode,
+		CallbackType: connectorCallbackTypeRollback,
+	}); err != nil && !isDuplicateCallbackError(err) {
+		return err
+	}
 	return nil
 }
 
@@ -244,4 +281,11 @@ func formatEventAmount(v interface{}) string {
 	default:
 		return "0.000000"
 	}
+}
+
+func isDuplicateCallbackError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate entry")
 }

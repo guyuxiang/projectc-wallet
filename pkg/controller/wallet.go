@@ -15,6 +15,8 @@ type WalletController interface {
 	TransferOut(c *gin.Context)
 	QueryTransaction(c *gin.Context)
 	QueryHistory(c *gin.Context)
+	ReceiveTxCallback(c *gin.Context)
+	ReceiveRollbackCallback(c *gin.Context)
 }
 
 func NewWalletController() WalletController {
@@ -183,6 +185,30 @@ func (wc *walletController) QueryHistory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, models.Response{Code: models.CodeSuccess, Message: "success", Data: resp})
+}
+
+func (wc *walletController) ReceiveTxCallback(c *gin.Context) {
+	var req models.ConnectorTxCallbackRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := wc.service.HandleTxCallback(c.Request.Context(), req); err != nil {
+		writeAppError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, models.Response{Code: models.CodeSuccess, Message: "success", Data: struct{}{}})
+}
+
+func (wc *walletController) ReceiveRollbackCallback(c *gin.Context) {
+	var req models.ConnectorTxRollbackRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := wc.service.HandleRollbackCallback(c.Request.Context(), req); err != nil {
+		writeAppError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, models.Response{Code: models.CodeSuccess, Message: "success", Data: struct{}{}})
 }
 
 func bindJSON(c *gin.Context, req interface{}) bool {

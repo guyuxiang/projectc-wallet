@@ -15,6 +15,8 @@ type Store interface {
 	GetWalletByNo(ctx context.Context, walletNo string) (*models.WalletEntity, error)
 	GetWalletByAddress(ctx context.Context, network string, address string) (*models.WalletEntity, error)
 	ListActiveWallets(ctx context.Context, network string) ([]models.WalletEntity, error)
+	GetConnectorCallback(ctx context.Context, txCode string, callbackType string) (*models.ConnectorCallbackEntity, error)
+	CreateConnectorCallback(ctx context.Context, callback *models.ConnectorCallbackEntity) error
 	CreateTransaction(ctx context.Context, tx *models.TransactionEntity) error
 	GetTransactionByNo(ctx context.Context, transactionNo string) (*models.TransactionEntity, error)
 	GetTransactionByRequestNo(ctx context.Context, requestNo string) (*models.TransactionEntity, error)
@@ -33,7 +35,7 @@ type gormStore struct {
 }
 
 func (s *gormStore) AutoMigrate() error {
-	return s.db.AutoMigrate(&models.WalletEntity{}, &models.TransactionEntity{})
+	return s.db.AutoMigrate(&models.WalletEntity{}, &models.TransactionEntity{}, &models.ConnectorCallbackEntity{})
 }
 
 func (s *gormStore) CreateWallet(ctx context.Context, wallet *models.WalletEntity) error {
@@ -68,6 +70,19 @@ func (s *gormStore) ListActiveWallets(ctx context.Context, network string) ([]mo
 		return nil, err
 	}
 	return wallets, nil
+}
+
+func (s *gormStore) GetConnectorCallback(ctx context.Context, txCode string, callbackType string) (*models.ConnectorCallbackEntity, error) {
+	var callback models.ConnectorCallbackEntity
+	err := s.db.WithContext(ctx).Where("tx_code = ? AND callback_type = ?", txCode, callbackType).First(&callback).Error
+	if err != nil {
+		return nil, err
+	}
+	return &callback, nil
+}
+
+func (s *gormStore) CreateConnectorCallback(ctx context.Context, callback *models.ConnectorCallbackEntity) error {
+	return s.db.WithContext(ctx).Create(callback).Error
 }
 
 func (s *gormStore) CreateTransaction(ctx context.Context, tx *models.TransactionEntity) error {

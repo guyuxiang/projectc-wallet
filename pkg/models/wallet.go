@@ -179,6 +179,33 @@ type CallbackResponse struct {
 	Message string      `json:"message"`
 }
 
+type ConnectorChainTx struct {
+	Code        string `json:"code"`
+	NetworkCode string `json:"networkCode"`
+	BlockNumber uint64 `json:"blockNumber"`
+	Timestamp   int64  `json:"timestamp"`
+	Status      string `json:"status"`
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Amount      string `json:"amount"`
+	Fee         string `json:"fee"`
+}
+
+type ConnectorChainEvent struct {
+	Type string                 `json:"type"`
+	Data map[string]interface{} `json:"data"`
+}
+
+type ConnectorTxCallbackRequest struct {
+	Tx       ConnectorChainTx      `json:"tx"`
+	TxEvents []ConnectorChainEvent `json:"txEvents"`
+}
+
+type ConnectorTxRollbackRequest struct {
+	TxCode      string `json:"txCode"`
+	NetworkCode string `json:"networkCode"`
+}
+
 type WalletEntity struct {
 	ID              uint   `gorm:"primaryKey"`
 	WalletNo        string `gorm:"size:64;uniqueIndex;not null"`
@@ -224,4 +251,16 @@ type TransactionEntity struct {
 
 func (TransactionEntity) TableName() string {
 	return "wallet_transactions"
+}
+
+type ConnectorCallbackEntity struct {
+	ID           uint      `gorm:"primaryKey"`
+	TxCode       string    `gorm:"size:128;not null;uniqueIndex:idx_connector_callbacks_tx_type"`
+	CallbackType string    `gorm:"size:32;not null;uniqueIndex:idx_connector_callbacks_tx_type"`
+	CreatedAt    time.Time `gorm:"index"`
+	UpdatedAt    time.Time
+}
+
+func (ConnectorCallbackEntity) TableName() string {
+	return "connector_callbacks"
 }

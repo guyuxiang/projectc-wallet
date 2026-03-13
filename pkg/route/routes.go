@@ -54,5 +54,7 @@ func InstallRoutes(r *gin.Engine) {
 		rootGroup.POST("/wallet/transfer/out", walletController.TransferOut)
 		rootGroup.POST("/wallet/transaction/query", walletController.QueryTransaction)
 		rootGroup.POST("/wallet/transaction/history/query", walletController.QueryHistory)
+		rootGroup.POST("/inner/wallet/callback/tx", walletController.ReceiveTxCallback)
+		rootGroup.POST("/inner/wallet/callback/rollback", walletController.ReceiveRollbackCallback)
 	}
 }

@@ -30,6 +30,8 @@ type WalletService interface {
 	QueryTransaction(ctx context.Context, req models.TransactionQueryRequest) (*models.TransactionQueryResponse, error)
 	QueryHistory(ctx context.Context, req models.TransactionHistoryQueryRequest) (*models.TransactionHistoryQueryResponse, error)
 	StartMQConsumer() error
+	HandleTxCallback(ctx context.Context, req models.ConnectorTxCallbackRequest) error
+	HandleRollbackCallback(ctx context.Context, req models.ConnectorTxRollbackRequest) error
 }
 
 func NewWalletService(cfg *config.Config, st store.Store, httpClient *http.Client) WalletService {
@@ -603,9 +605,6 @@ func (s *walletService) doJSONRequest(ctx context.Context, baseURL string, path 
 }
 
 func (s *walletService) notifyDeposit(ctx context.Context, tx *models.TransactionEntity) {
-	if s.cfg == nil || s.cfg.Callback == nil || s.cfg.Callback.DepositURL == "" {
-		return
-	}
 	payload := models.DepositNotifyRequest{
 		NotifyID:      generateID("N"),
 		TransactionNo: tx.TransactionNo,
@@ -624,13 +623,19 @@ func (s *walletService) notifyDeposit(ctx context.Context, tx *models.Transactio
 	if tx.TokenAddress == models.TokenNative {
 		payload.TokenAddress = ""
 	}
-	_ = s.postSignedCallback(ctx, s.cfg.Callback.DepositURL, payload)
+	if s.cfg == nil || s.cfg.Callback == nil || s.cfg.Callback.DepositURL == "" {
+		log.Infof("skip deposit notify callback: depositUrl is empty payload=%+v", payload)
+		return
+	}
+	log.Infof("deposit notify request url=%s payload=%+v", s.cfg.Callback.DepositURL, payload)
+	if err := s.postSignedCallback(ctx, s.cfg.Callback.DepositURL, payload); err != nil {
+		log.Warningf("deposit notify callback failed url=%s err=%v payload=%+v", s.cfg.Callback.DepositURL, err, payload)
+		return
+	}
+	log.Infof("deposit notify callback success url=%s transactionNo=%s", s.cfg.Callback.DepositURL, tx.TransactionNo)
 }
 
 func (s *walletService) notifyTransferOutResult(ctx context.Context, tx *models.TransactionEntity) {
-	if s.cfg == nil || s.cfg.Callback == nil || s.cfg.Callback.TransferOutURL == "" {
-		return
-	}
 	payload := models.TransferOutNotifyRequest{
 		NotifyID:      generateID("N"),
 		TransactionNo: tx.TransactionNo,
@@ -651,7 +656,16 @@ func (s *walletService) notifyTransferOutResult(ctx context.Context, tx *models.
 	if tx.TokenAddress == models.TokenNative {
 		payload.TokenAddress = ""
 	}
-	_ = s.postSignedCallback(ctx, s.cfg.Callback.TransferOutURL, payload)
+	if s.cfg == nil || s.cfg.Callback == nil || s.cfg.Callback.TransferOutURL == "" {
+		log.Infof("skip transfer out notify callback: transferOutUrl is empty payload=%+v", payload)
+		return
+	}
+	log.Infof("transfer out notify request url=%s payload=%+v", s.cfg.Callback.TransferOutURL, payload)
+	if err := s.postSignedCallback(ctx, s.cfg.Callback.TransferOutURL, payload); err != nil {
+		log.Warningf("transfer out notify callback failed url=%s err=%v payload=%+v", s.cfg.Callback.TransferOutURL, err, payload)
+		return
+	}
+	log.Infof("transfer out notify callback success url=%s transactionNo=%s", s.cfg.Callback.TransferOutURL, tx.TransactionNo)
 }
 
 func (s *walletService) postSignedCallback(ctx context.Context, url string, payload interface{}) error {
