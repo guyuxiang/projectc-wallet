@@ -3,7 +3,6 @@ module github.com/guyuxiang/projectc-custodial-wallet
 go 1.22.2
 
 require (
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/gagliardetto/solana-go v1.10.0
 	github.com/gin-gonic/gin v1.6.3
 	github.com/pkg/sftp v1.12.0

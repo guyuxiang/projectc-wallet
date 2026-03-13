@@ -1,8 +1,6 @@
 # Building stage
 FROM docker.m.daocloud.io/golang:1.24
 
-RUN apk add --update make
-
 WORKDIR /go/src/github.com/guyuxiang/projectc-custodial-wallet
 
 COPY . /go/src/github.com/guyuxiang/projectc-custodial-wallet
@@ -20,7 +18,7 @@ RUN mv build/pkg/cmd/projectc-custodial-wallet/projectc-custodial-wallet /go/bin
 FROM docker.m.daocloud.io/golang:1.24
 WORKDIR /go/bin
 
-LABEL maintainer="guyuxiang <guyuxiang@qq.com>"
+LABEL maintainer="guyuxiang <gu_yuxiang@qq.com>"
 
 # copy the go binaries from the building stage
 COPY --from=0 /go/bin /go/bin

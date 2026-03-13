@@ -12,7 +12,7 @@ definitions:
 host: '{{.Host}}'
 info:
   contact:
-    email: guyuxiang@qq.com
+    email: gu_yuxiang@qq.com
     name: guyuxiang
     url: https://guyuxiang.github.io
   description: This is a projectc-custodial-wallet.
