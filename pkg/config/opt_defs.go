@@ -22,6 +22,31 @@ var flagsOpts = []flagOpt{
 		optUsage:        "log level",
 	},
 	{
+		optName:         FLAG_KEY_MYSQL_USERNAME,
+		optDefaultValue: "",
+		optUsage:        "mysql username",
+	},
+	{
+		optName:         FLAG_KEY_MYSQL_PASSWORD,
+		optDefaultValue: "",
+		optUsage:        "mysql password",
+	},
+	{
+		optName:         FLAG_KEY_MYSQL_HOST,
+		optDefaultValue: "",
+		optUsage:        "mysql host",
+	},
+	{
+		optName:         FLAG_KEY_MYSQL_PORT,
+		optDefaultValue: 0,
+		optUsage:        "mysql port",
+	},
+	{
+		optName:         FLAG_KEY_MYSQL_DATABASE,
+		optDefaultValue: "projectc-custodial-wallet",
+		optUsage:        "mysql database",
+	},
+	{
 		optName:         FLAG_KEY_MYSQL_DSN,
 		optDefaultValue: "",
 		optUsage:        "mysql dsn",
