@@ -14,7 +14,7 @@ mysql:
   password: "123456"
   host: "mysql01.dev.lls.com"
   port: 4120
-  database: "projectc-solana-connector"
+  database: "projectc-custodial-wallet"
   maxIdleConns: 200
   maxOpenConns: 200
 rabbitmq:
