@@ -260,36 +260,7 @@ paths:
       summary: ReceiveTxCallback
       tags:
       - Wallet
-  /todo/get:
-    get:
-      description: Get todo demo response.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Response'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.Response'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.Response'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/models.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/models.Response'
-      summary: GetToDo
-      tags:
-      - ToDo
-  /wallet/create:
+  /inner/wallet/create:
     post:
       consumes:
       - application/json

@@ -197,51 +197,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/todo/get": {
-            "get": {
-                "description": "Get todo demo response.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ToDo"
-                ],
-                "summary": "GetToDo",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/wallet/create": {
+        "/inner/wallet/create": {
             "post": {
                 "description": "Create a master walletNo and automatically create addresses for all configured networks.",
                 "consumes": [

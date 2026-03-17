@@ -41,7 +41,7 @@ type walletController struct {
 // @Failure 401 {object} models.Response
 // @Failure 403 {object} models.Response
 // @Failure 500 {object} models.Response
-// @Router /wallet/create [post]
+// @Router /inner/wallet/create [post]
 func (wc *walletController) CreateWallet(c *gin.Context) {
 	req := models.WalletCreateRequest{}
 	if c.Request.ContentLength > 0 {

@@ -53,12 +53,12 @@ func InstallRoutes(r *gin.Engine) {
 
 	{
 		walletController := controller.NewWalletController()
-		rootGroup.POST("/wallet/create", walletController.CreateWallet)
 		rootGroup.POST("/wallet/info/query", walletController.QueryWalletInfo)
 		rootGroup.POST("/wallet/transfer/out/query", walletController.QueryTransferOutAssets)
 		rootGroup.POST("/wallet/transfer/out", walletController.TransferOut)
 		rootGroup.POST("/wallet/transaction/query", walletController.QueryTransaction)
 		rootGroup.POST("/wallet/transaction/history/query", walletController.QueryHistory)
+		rootGroup.POST("/inner/wallet/create", walletController.CreateWallet)
 		rootGroup.POST("/inner/wallet/callback/tx", walletController.ReceiveTxCallback)
 		rootGroup.POST("/inner/wallet/callback/rollback", walletController.ReceiveRollbackCallback)
 	}
