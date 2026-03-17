@@ -46,11 +46,9 @@ func (p *solanaProvider) CreateWallet(ctx context.Context, opts walletCreateOpti
 
 	if walletNo != "" {
 		if existing, err := p.svc.store.GetWalletByNoAndNetwork(ctx, walletNo, p.network); err == nil {
-			return newWalletCreateResponse(models.WalletCreateItem{
-				WalletNo:   existing.WalletNo,
-				Network:    existing.Network,
-				Address:    existing.Address,
-				KeystoreID: existing.KMSKeystoreID,
+			return newWalletCreateResponse(existing.WalletNo, models.WalletCreateItem{
+				Network: existing.Network,
+				Address: existing.Address,
 			}), nil
 		} else if err != nil && !store.IsNotFound(err) {
 			return nil, wrapSystemError(err)
@@ -147,11 +145,9 @@ func (p *solanaProvider) CreateWallet(ctx context.Context, opts walletCreateOpti
 		return nil, wrapSystemError(err)
 	}
 
-	return newWalletCreateResponse(models.WalletCreateItem{
-		WalletNo:   wallet.WalletNo,
-		Network:    wallet.Network,
-		Address:    wallet.Address,
-		KeystoreID: wallet.KMSKeystoreID,
+	return newWalletCreateResponse(wallet.WalletNo, models.WalletCreateItem{
+		Network: wallet.Network,
+		Address: wallet.Address,
 	}), nil
 }
 

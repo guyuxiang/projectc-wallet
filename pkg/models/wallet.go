@@ -41,18 +41,13 @@ type WalletInfoQueryRequest struct {
 type WalletCreateRequest struct{}
 
 type WalletCreateItem struct {
-	WalletNo   string `json:"walletNo"`
-	Network    string `json:"network"`
-	Address    string `json:"address"`
-	KeystoreID string `json:"keystoreId"`
+	Network string `json:"network"`
+	Address string `json:"address"`
 }
 
 type WalletCreateResponse struct {
-	WalletNo   string             `json:"walletNo"`
-	Network    string             `json:"network"`
-	Address    string             `json:"address"`
-	KeystoreID string             `json:"keystoreId"`
-	Wallets    []WalletCreateItem `json:"wallets"`
+	WalletNo string             `json:"walletNo"`
+	Wallets  []WalletCreateItem `json:"wallets"`
 }
 
 type WalletInfoQueryResponse struct {

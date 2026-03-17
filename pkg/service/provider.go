@@ -194,12 +194,9 @@ func normalizedNetwork(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))
 }
 
-func newWalletCreateResponse(item models.WalletCreateItem) *models.WalletCreateResponse {
+func newWalletCreateResponse(walletNo string, item models.WalletCreateItem) *models.WalletCreateResponse {
 	return &models.WalletCreateResponse{
-		WalletNo:   item.WalletNo,
-		Network:    item.Network,
-		Address:    item.Address,
-		KeystoreID: item.KeystoreID,
-		Wallets:    []models.WalletCreateItem{item},
+		WalletNo: walletNo,
+		Wallets:  []models.WalletCreateItem{item},
 	}
 }

@@ -108,10 +108,8 @@ func (s *walletService) createWallets(ctx context.Context, masterWalletNo string
 			existingByNetwork := make(map[string]models.WalletCreateItem, len(existingWallets))
 			for _, wallet := range existingWallets {
 				existingByNetwork[normalizedNetwork(wallet.Network)] = models.WalletCreateItem{
-					WalletNo:   wallet.WalletNo,
-					Network:    wallet.Network,
-					Address:    wallet.Address,
-					KeystoreID: wallet.KMSKeystoreID,
+					Network: wallet.Network,
+					Address: wallet.Address,
 				}
 			}
 			filtered := make([]string, 0, len(networks))
@@ -145,12 +143,6 @@ func (s *walletService) createWallets(ctx context.Context, masterWalletNo string
 			items = append(items, resp.Wallets[0])
 			continue
 		}
-		items = append(items, models.WalletCreateItem{
-			WalletNo:   resp.WalletNo,
-			Network:    resp.Network,
-			Address:    resp.Address,
-			KeystoreID: resp.KeystoreID,
-		})
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -159,11 +151,6 @@ func (s *walletService) createWallets(ctx context.Context, masterWalletNo string
 	response := &models.WalletCreateResponse{
 		WalletNo: masterWalletNo,
 		Wallets:  items,
-	}
-	if len(items) == 1 {
-		response.Network = items[0].Network
-		response.Address = items[0].Address
-		response.KeystoreID = items[0].KeystoreID
 	}
 	return response, nil
 }
