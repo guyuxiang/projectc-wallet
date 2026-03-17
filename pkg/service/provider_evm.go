@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 	"regexp"
 	"strings"
@@ -245,6 +246,10 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 	if !wallet.TransferEnabled {
 		return nil, newAppError(models.CodePermissionDenied, "wallet transfer is disabled")
 	}
+	requestAmount := normalizeAmountString(req.Amount)
+	if p.eip7702Enabled() {
+		return p.transferOutWithEIP7702(ctx, wallet, req, tokenSymbolInput, tokenAddress, requestAmount)
+	}
 	rpcClient, chainID, gasPrice, nonce, err := p.prepareTransferBuild(ctx, wallet.Address)
 	if err != nil {
 		return nil, err
@@ -253,7 +258,6 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 
 	var signResult *kmsSignResponse
 	tokenSymbol := p.svc.nativeTokenSymbol(p.network)
-	requestAmount := normalizeAmountString(req.Amount)
 	if strings.EqualFold(tokenSymbolInput, tokenSymbol) {
 		var balanceResp struct {
 			Balance float64 `json:"balance"`
@@ -342,6 +346,222 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 
 	go p.svc.notifyTransferOutResult(context.Background(), tx)
 
+	return &models.TransferOutResponse{
+		TransactionNo: tx.TransactionNo,
+		RequestNo:     tx.RequestNo,
+	}, nil
+}
+
+func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models.WalletEntity, req models.TransferOutRequest, tokenSymbolInput string, tokenAddress string, requestAmount string) (*models.TransferOutResponse, error) {
+	connector := p.svc.connectorConfig(p.network)
+	if connector == nil {
+		return nil, newAppError(models.CodeSystemBusy, "evm connector is not configured")
+	}
+	delegator := strings.TrimSpace(connector.EIP7702Delegator)
+	if !validateEVMAddress(delegator) {
+		return nil, newAppError(models.CodeSystemBusy, "invalid eip7702 delegator address")
+	}
+	entryPoint := strings.TrimSpace(connector.EntryPoint)
+	if entryPoint == "" {
+		entryPoint = entryPointV08Default
+	}
+	if !validateEVMAddress(entryPoint) {
+		return nil, newAppError(models.CodeSystemBusy, "invalid entry point address")
+	}
+
+	rpcClient, chainID, gasPrice, txNonce, err := p.prepareTransferBuild(ctx, wallet.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	bundlerClient, err := p.newBundlerRPCClient()
+	if err != nil {
+		return nil, err
+	}
+
+	callData := "0x"
+	callTarget := req.ToAddress
+	transferToAddress := req.ToAddress
+	tokenSymbol := p.svc.nativeTokenSymbol(p.network)
+	callValue := big.NewInt(0)
+	callGasLimit := p.userOperationCallGasLimit(true)
+
+	if strings.EqualFold(tokenSymbolInput, tokenSymbol) {
+		var balanceResp struct {
+			Balance float64 `json:"balance"`
+		}
+		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/address-balance", map[string]string{
+			"address": wallet.Address,
+		}, &balanceResp); err != nil {
+			return nil, wrapSystemError(err)
+		}
+		requestAmountValue, err := parseAmount(req.Amount)
+		if err != nil {
+			return nil, newAppError(models.CodeParamError, err.Error())
+		}
+		if balanceResp.Balance < requestAmountValue {
+			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
+		}
+		callValue, err = decimalToBaseUnits(requestAmount, 18)
+		if err != nil {
+			return nil, newAppError(models.CodeParamError, err.Error())
+		}
+	} else {
+		tokenMeta, err := p.findConnectorTokenByCode(ctx, tokenSymbolInput)
+		if err != nil {
+			return nil, err
+		}
+		tokenAddress = tokenMeta.Address()
+		var tokenBalanceResp struct {
+			Value float64 `json:"value"`
+		}
+		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-balance", map[string]string{
+			"address":   wallet.Address,
+			"tokenCode": tokenMeta.Code,
+		}, &tokenBalanceResp); err != nil {
+			return nil, wrapSystemError(err)
+		}
+		requestAmountValue, err := parseAmount(req.Amount)
+		if err != nil {
+			return nil, newAppError(models.CodeParamError, err.Error())
+		}
+		if tokenBalanceResp.Value < requestAmountValue {
+			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
+		}
+		amountUnits, err := decimalToBaseUnits(requestAmount, tokenMeta.Decimals)
+		if err != nil {
+			return nil, newAppError(models.CodeParamError, err.Error())
+		}
+		callData, err = buildERC20TransferData(transferToAddress, amountUnits)
+		if err != nil {
+			return nil, newAppError(models.CodeParamError, err.Error())
+		}
+		tokenSymbol = tokenMeta.Code
+		callGasLimit = p.userOperationCallGasLimit(false)
+		callTarget = tokenMeta.Address()
+	}
+
+	userOpCallData, err := buildEIP7702ExecuteCallData(callTarget, callValue, callData)
+	if err != nil {
+		return nil, newAppError(models.CodeParamError, err.Error())
+	}
+	userOpNonce, err := rpcClient.getUserOperationNonce(ctx, entryPoint, wallet.Address)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+	userOp := evmUserOperation{
+		Sender:               wallet.Address,
+		Nonce:                formatHexUint64(userOpNonce),
+		Factory:              eip7702FactoryFlag,
+		FactoryData:          "0x",
+		CallData:             userOpCallData,
+		CallGasLimit:         formatHexUint64(callGasLimit),
+		VerificationGasLimit: formatHexUint64(0),
+		PreVerificationGas:   formatHexUint64(0),
+		MaxPriorityFeePerGas: formatHexBig(gasPrice),
+		MaxFeePerGas:         formatHexBig(gasPrice),
+		Signature:            "0x",
+	}
+	existingDelegator, alreadyDelegated, err := p.lookupEIP7702Delegator(ctx, rpcClient, wallet.Address)
+	if err != nil {
+		return nil, err
+	}
+	if alreadyDelegated && !strings.EqualFold(existingDelegator, delegator) {
+		return nil, newAppError(models.CodeSystemBusy, "account is already delegated to another eip7702 contract")
+	}
+	stateOverride, err := p.userOperationEstimateStateOverride(wallet.Address, delegator, alreadyDelegated)
+	if err != nil {
+		return nil, err
+	}
+	gasEstimate, err := bundlerClient.estimateUserOperationGas(ctx, userOp, entryPoint, stateOverride)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+	if strings.TrimSpace(gasEstimate.CallGasLimit) != "" {
+		userOp.CallGasLimit = gasEstimate.CallGasLimit
+	}
+	if strings.TrimSpace(gasEstimate.VerificationGasLimit) == "" || strings.TrimSpace(gasEstimate.PreVerificationGas) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "bundler estimateUserOperationGas returned incomplete gas fields")
+	}
+	userOp.VerificationGasLimit = gasEstimate.VerificationGasLimit
+	userOp.PreVerificationGas = gasEstimate.PreVerificationGas
+	if strings.TrimSpace(gasEstimate.PaymasterVerificationGasLimit) != "" {
+		userOp.PaymasterVerificationGasLimit = gasEstimate.PaymasterVerificationGasLimit
+	}
+	if strings.TrimSpace(gasEstimate.PaymasterPostOpGasLimit) != "" {
+		userOp.PaymasterPostOpGasLimit = gasEstimate.PaymasterPostOpGasLimit
+	}
+
+	var authMap map[string]interface{}
+	if alreadyDelegated {
+		authMap = map[string]interface{}{
+			"chainId": formatHexUint64(chainID),
+			"address": delegator,
+		}
+	} else {
+		authSignRes, err := p.svc.signEIP7702Authorization(ctx, wallet, chainID, delegator, txNonce)
+		if err != nil {
+			return nil, err
+		}
+		r, s, yParity, err := parseSignatureRSV(authSignRes.Signature)
+		if err != nil {
+			return nil, wrapSystemError(err)
+		}
+		authMap = map[string]interface{}{
+			"chainId":   formatHexUint64(chainID),
+			"address":   delegator,
+			"nonce":     formatHexUint64(txNonce),
+			"r":         r,
+			"s":         s,
+			"yParity":   yParity,
+			"hash":      authSignRes.Hash,
+			"signature": authSignRes.Signature,
+		}
+	}
+	typedData, err := buildUserOperationTypedData(chainID, entryPoint, userOp)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+	userOpSignRes, err := p.svc.signEIP712TypedData(ctx, wallet, typedData)
+	if err != nil {
+		return nil, err
+	}
+	userOp.Signature = userOpSignRes.Signature
+
+	userOpMap, err := structToMap(userOp)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+
+	var sendResp struct {
+		TxCode string `json:"txCode"`
+	}
+	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-invoke/evm/common/tx-send", map[string]interface{}{
+		"entryPoint":    entryPoint,
+		"userOperation": userOpMap,
+		"eip7702Auth":   authMap,
+	}, &sendResp); err != nil {
+		return nil, wrapSystemError(err)
+	}
+
+	tx := &models.TransactionEntity{
+		TransactionNo: generateID("T"),
+		RequestNo:     req.RequestNo,
+		Direction:     models.DirectionOut,
+		WalletNo:      wallet.WalletNo,
+		Network:       wallet.Network,
+		FromAddress:   wallet.Address,
+		ToAddress:     transferToAddress,
+		TokenAddress:  tokenAddress,
+		TokenSymbol:   tokenSymbol,
+		Amount:        requestAmount,
+		TxHash:        sendResp.TxCode,
+		Status:        models.StatusProcessing,
+	}
+	if err := p.svc.store.CreateTransaction(ctx, tx); err != nil {
+		return nil, wrapSystemError(err)
+	}
+	go p.svc.notifyTransferOutResult(context.Background(), tx)
 	return &models.TransferOutResponse{
 		TransactionNo: tx.TransactionNo,
 		RequestNo:     tx.RequestNo,
@@ -691,4 +911,73 @@ func (p *evmProvider) tokenGasLimit() uint64 {
 		return connector.TokenGasLimit
 	}
 	return 65000
+}
+
+func (p *evmProvider) eip7702Enabled() bool {
+	connector := p.svc.connectorConfig(p.network)
+	return connector != nil && connector.EnableEIP7702
+}
+
+func (p *evmProvider) lookupEIP7702Delegator(ctx context.Context, rpcClient *evmRPCClient, address string) (string, bool, error) {
+	code, err := rpcClient.getCode(ctx, address)
+	if err != nil {
+		return "", false, wrapSystemError(err)
+	}
+	delegator, delegated, err := parseEIP7702DelegationIndicator(code)
+	if err != nil {
+		return "", false, wrapSystemError(err)
+	}
+	return delegator, delegated, nil
+}
+
+func (p *evmProvider) userOperationEstimateStateOverride(sender string, delegator string, alreadyDelegated bool) (evmStateOverride, error) {
+	if alreadyDelegated {
+		return nil, nil
+	}
+	code, err := buildEIP7702DelegationIndicatorCode(delegator)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+	return evmStateOverride{
+		sender: {
+			"code": code,
+		},
+	}, nil
+}
+
+func (p *evmProvider) userOperationCallGasLimit(native bool) uint64 {
+	base := p.tokenGasLimit()
+	if native {
+		base = p.nativeGasLimit()
+	}
+	if native {
+		if base < 25000 {
+			base = 25000
+		}
+		return base * 5
+	}
+	if base < 65000 {
+		base = 65000
+	}
+	return base * 3
+}
+
+func (p *evmProvider) newBundlerRPCClient() (*evmRPCClient, error) {
+	connector := p.svc.connectorConfig(p.network)
+	if connector == nil || strings.TrimSpace(connector.BundlerRPCEndpoint) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "bundler rpc endpoint is not configured")
+	}
+	return newEVMRPCClient(p.svc.httpClient, connector.BundlerRPCEndpoint), nil
+}
+
+func structToMap(v interface{}) (map[string]interface{}, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

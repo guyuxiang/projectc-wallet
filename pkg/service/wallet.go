@@ -301,6 +301,30 @@ type kmsSignResponse struct {
 	Signature string `json:"signature"`
 }
 
+type SignEIP7702Request struct {
+	KeystoreId string `json:"keystore_id,omitempty"`
+	Password   string `json:"password,omitempty"`
+	ChainID    string `json:"chainId,omitempty"`
+	Address    string `json:"address,omitempty"`
+	Nonce      uint64 `json:"nonce,omitempty"`
+}
+
+type SignedEIP7702Res struct {
+	Hash      string `json:"hash,omitempty"`
+	Signature string `json:"signature,omitempty"`
+}
+
+type SignTypedDataRequest struct {
+	KeystoreId string `json:"keystore_id,omitempty"`
+	Password   string `json:"password,omitempty"`
+	TypedData  string `json:"typed_data,omitempty"`
+}
+
+type SignDataRes struct {
+	Hash      string `json:"hash,omitempty"`
+	Signature string `json:"signature,omitempty"`
+}
+
 func (s *walletService) signSolanaTransaction(ctx context.Context, wallet *models.WalletEntity, unsignedTx string) (*kmsSignResponse, error) {
 	body := map[string]string{
 		"keystore_id": wallet.KMSKeystoreID,
@@ -342,6 +366,45 @@ func (s *walletService) signEVMTransaction(ctx context.Context, wallet *models.W
 	default:
 		return nil, newAppError(models.CodeSystemBusy, "unsupported kms key type")
 	}
+	if err := s.kmsPost(ctx, path, body, &data); err != nil {
+		return nil, wrapSystemError(err)
+	}
+	return &data, nil
+}
+
+func (s *walletService) signEIP7702Authorization(ctx context.Context, wallet *models.WalletEntity, chainID uint64, address string, nonce uint64) (*SignedEIP7702Res, error) {
+	if strings.ToLower(wallet.KMSKeyType) != "mnemonic" {
+		return nil, newAppError(models.CodeSystemBusy, "eip7702 requires mnemonic kms key type")
+	}
+	body := SignEIP7702Request{
+		KeystoreId: wallet.KMSKeystoreID,
+		Password:   wallet.KMSPassword,
+		ChainID:    strconv.FormatUint(chainID, 10),
+		Address:    address,
+		Nonce:      nonce,
+	}
+	var data SignedEIP7702Res
+	path := fmt.Sprintf("/kms/mnemonic/sign-eip7702/evm/%s/%s/%s", defaultIndex(wallet.AccountIndex), defaultIndex(wallet.ChangeIndex), defaultIndex(wallet.AddressIndex))
+	if err := s.kmsPost(ctx, path, body, &data); err != nil {
+		return nil, wrapSystemError(err)
+	}
+	return &data, nil
+}
+
+func (s *walletService) signEIP712TypedData(ctx context.Context, wallet *models.WalletEntity, typedData string) (*SignDataRes, error) {
+	if strings.TrimSpace(typedData) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "empty typed data")
+	}
+	if strings.ToLower(wallet.KMSKeyType) != "mnemonic" {
+		return nil, newAppError(models.CodeSystemBusy, "typed data signing requires mnemonic kms key type")
+	}
+	body := SignTypedDataRequest{
+		KeystoreId: wallet.KMSKeystoreID,
+		Password:   wallet.KMSPassword,
+		TypedData:  typedData,
+	}
+	var data SignDataRes
+	path := fmt.Sprintf("/kms/mnemonic/sign-typed-data/evm/%s/%s/%s", defaultIndex(wallet.AccountIndex), defaultIndex(wallet.ChangeIndex), defaultIndex(wallet.AddressIndex))
 	if err := s.kmsPost(ctx, path, body, &data); err != nil {
 		return nil, wrapSystemError(err)
 	}
