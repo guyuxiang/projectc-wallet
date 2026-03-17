@@ -38,10 +38,6 @@ func init() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	_ = viper.BindEnv(FLAG_KEY_SOL_RPC, "SOLANA_RPC_ENDPOINT", "SOLANA_RPCENDPOINT")
-	_ = viper.BindEnv(FLAG_KEY_SIGN_API_KEY, "SIGNATURE_API_KEY")
-	_ = viper.BindEnv(FLAG_KEY_SIGN_PUBLIC, "SIGNATURE_PUBLIC_KEY", "SIGNATURE_PUBLICKEY")
-	_ = viper.BindEnv(FLAG_KEY_SIGN_PRIVATE, "SIGNATURE_PRIVATE_KEY", "SIGNATURE_PRIVATEKEY")
-	_ = viper.BindEnv(FLAG_KEY_SIGN_SKEW, "SIGNATURE_MAX_SKEW_MILLIS", "SIGNATURE_MAXSKEWMILLIS")
 
 	for _, opt := range flagsOpts {
 		switch opt.optDefaultValue.(type) {

@@ -41,6 +41,27 @@ pkg/
 * store: 存储模块，可以添加MySQL、Redis等
 * util: 通用的库函数
 
+## Multi-Network
+
+项目现在支持按 `network` 路由到不同 connector / provider：
+
+* 配置层使用 `connectors.<network>` 定义多个 connector，例如 `solana`、`ethereum`、`polygon`
+* `POST /api/v1/wallet/create` 无需传参，创建时会生成一个主 `walletNo`，并按已配置网络批量创建地址
+* service 层通过 provider 注册表分发到具体网络实现，当前已接入 `solana` 和 `evm`
+* `evm` provider 可同时承载 `ethereum`、`polygon` 等各自独立 connector 的网络
+* 一个主 `walletNo` 下可以挂多个网络地址，新增网络 connector 后，重启服务会自动给已有主 `walletNo` 补齐缺失网络地址
+* `POST /api/v1/wallet/info/query` 中 `network` 不为空时查询指定网络余额；为空时按 `tokenSymbol` 聚合所有网络余额
+* `POST /api/v1/wallet/transfer/out` 使用 `tokenSymbol` 作为转出资产标识，不再使用 `tokenAddress`
+
+## Signature Key
+
+签名公私钥不再从配置文件读取，统一持久化到数据库：
+
+* 请求验签头使用 `X-Publickey-ID`、`X-Timestamp`、`X-Signature`
+* 回调签名默认使用数据库中的签名 key；如果存在多条记录，建议写入 `publickeyId = default`
+* 管理接口：`POST /api/v1/admin/signature/key/upsert`
+* 管理接口使用 `BasicAuth`，账号密码来自 `auth.username` / `auth.password`
+
 ## Usage
 
 * step1 - 替换项目名称

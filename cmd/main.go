@@ -36,7 +36,6 @@ func main() {
 	route.InstallRoutes(r)
 	serverBindAddr := fmt.Sprintf("%s:%d", config.GetString(config.FLAG_KEY_SERVER_HOST), config.GetInt(config.FLAG_KEY_SERVER_PORT))
 	log.Infof("mysql initialized successfully")
-	log.Infof("rabbitmq consumer disabled, using http callbacks only")
 	log.Infof("Run server at %s", serverBindAddr)
 	r.Run(serverBindAddr) // listen and serve
 }

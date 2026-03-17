@@ -29,20 +29,30 @@ const (
 	StatusFail       = "FAIL"
 
 	NetworkSolana = "solana"
+	NetworkEVM    = "evm"
 	TokenNative   = "NATIVE"
 )
 
 type WalletInfoQueryRequest struct {
 	WalletNo string `json:"walletNo" binding:"required"`
+	Network  string `json:"network"`
 }
 
 type WalletCreateRequest struct{}
 
-type WalletCreateResponse struct {
+type WalletCreateItem struct {
 	WalletNo   string `json:"walletNo"`
 	Network    string `json:"network"`
 	Address    string `json:"address"`
 	KeystoreID string `json:"keystoreId"`
+}
+
+type WalletCreateResponse struct {
+	WalletNo   string             `json:"walletNo"`
+	Network    string             `json:"network"`
+	Address    string             `json:"address"`
+	KeystoreID string             `json:"keystoreId"`
+	Wallets    []WalletCreateItem `json:"wallets"`
 }
 
 type WalletInfoQueryResponse struct {
@@ -57,6 +67,7 @@ type WalletTokenBalance struct {
 
 type TransferOutQueryRequest struct {
 	WalletNo string `json:"walletNo" binding:"required"`
+	Network  string `json:"network"`
 }
 
 type TransferOutQueryResponse struct {
@@ -71,12 +82,12 @@ type TransferableAsset struct {
 }
 
 type TransferOutRequest struct {
-	RequestNo    string `json:"requestNo" binding:"required"`
-	WalletNo     string `json:"walletNo" binding:"required"`
-	Network      string `json:"network" binding:"required"`
-	ToAddress    string `json:"toAddress" binding:"required"`
-	TokenAddress string `json:"tokenAddress"`
-	Amount       string `json:"amount" binding:"required"`
+	RequestNo   string `json:"requestNo" binding:"required"`
+	WalletNo    string `json:"walletNo" binding:"required"`
+	Network     string `json:"network" binding:"required"`
+	ToAddress   string `json:"toAddress" binding:"required"`
+	TokenSymbol string `json:"tokenSymbol"`
+	Amount      string `json:"amount" binding:"required"`
 }
 
 type TransferOutResponse struct {
@@ -208,9 +219,9 @@ type ConnectorTxRollbackRequest struct {
 
 type WalletEntity struct {
 	ID              uint   `gorm:"primaryKey"`
-	WalletNo        string `gorm:"size:64;uniqueIndex;not null"`
-	Network         string `gorm:"size:32;index;not null"`
-	Address         string `gorm:"size:128;index;not null"`
+	WalletNo        string `gorm:"size:64;not null;uniqueIndex:uk_wallet_network,priority:1;index"`
+	Network         string `gorm:"size:32;not null;uniqueIndex:uk_wallet_network,priority:2;index;uniqueIndex:uk_network_address,priority:1"`
+	Address         string `gorm:"size:128;not null;index;uniqueIndex:uk_network_address,priority:2"`
 	KMSKeystoreID   string `gorm:"size:128;not null"`
 	KMSPassword     string `gorm:"size:512;not null"`
 	KMSKeyType      string `gorm:"size:32;not null"`
@@ -226,6 +237,29 @@ type WalletEntity struct {
 
 func (WalletEntity) TableName() string {
 	return "wallets"
+}
+
+type SignatureKeyUpsertRequest struct {
+	PublickeyID string `json:"publickeyId" binding:"required"`
+	PublicKey   string `json:"publicKey" binding:"required"`
+	PrivateKey  string `json:"privateKey" binding:"required"`
+}
+
+type SignatureKeyUpsertResponse struct {
+	PublickeyID string `json:"publickeyId"`
+}
+
+type SignatureKeyEntity struct {
+	ID          uint   `gorm:"primaryKey"`
+	PublickeyID string `gorm:"size:128;uniqueIndex;not null"`
+	PublicKey   string `gorm:"size:1024;not null"`
+	PrivateKey  string `gorm:"size:2048;not null"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (SignatureKeyEntity) TableName() string {
+	return "signature_keys"
 }
 
 type TransactionEntity struct {

@@ -3,17 +3,16 @@ package config
 import "fmt"
 
 type Config struct {
-	Server    *Server    `yaml:"server"`
-	Auth      *Auth      `yaml:"auth"`
-	Gin       *Gin       `yaml:"gin"`
-	Log       *Log       `yaml:"log"`
-	MySQL     *MySQL     `yaml:"mysql"`
-	RabbitMQ  *RabbitMQ  `yaml:"rabbitmq"`
-	Signature *Signature `yaml:"signature"`
-	KMS       *KMS       `yaml:"kms"`
-	Connector *Connector `yaml:"connector"`
-	Callback  *Callback  `yaml:"callback"`
-	Solana    *Solana    `yaml:"solana"`
+	Server     *Server               `yaml:"server"`
+	Auth       *Auth                 `yaml:"auth"`
+	Gin        *Gin                  `yaml:"gin"`
+	Log        *Log                  `yaml:"log"`
+	MySQL      *MySQL                `yaml:"mysql"`
+	KMS        *KMS                  `yaml:"kms"`
+	Connector  *Connector            `yaml:"connector"`
+	Connectors map[string]*Connector `yaml:"connectors"`
+	Callback   *Callback             `yaml:"callback"`
+	Solana     *Solana               `yaml:"solana"`
 }
 
 type Server struct {
@@ -67,23 +66,6 @@ func (m *MySQL) EffectiveDSN() string {
 	)
 }
 
-type RabbitMQ struct {
-	URL            string `yaml:"url"`
-	VHost          string `yaml:"vhost"`
-	Exchange       string `yaml:"exchange"`
-	CancelExchange string `yaml:"cancelExchange"`
-	ExchangeType   string `yaml:"exchangeType"`
-	Queue          string `yaml:"queue"`
-	RoutingKey     string `yaml:"routingKey"`
-}
-
-type Signature struct {
-	APIKey        string `yaml:"apiKey"`
-	PublicKey     string `yaml:"publicKey"`
-	PrivateKey    string `yaml:"privateKey"`
-	MaxSkewMillis int64  `yaml:"maxSkewMillis"`
-}
-
 type KMS struct {
 	BaseURL  string `yaml:"baseUrl"`
 	Username string `yaml:"username"`
@@ -94,8 +76,13 @@ type Connector struct {
 	BaseURL           string `yaml:"baseUrl"`
 	Username          string `yaml:"username"`
 	Password          string `yaml:"password"`
+	Driver            string `yaml:"driver"`
 	NetworkCode       string `yaml:"networkCode"`
 	NativeTokenSymbol string `yaml:"nativeTokenSymbol"`
+	RPCEndpoint       string `yaml:"rpcEndpoint"`
+	ChainID           uint64 `yaml:"chainId"`
+	GasLimit          uint64 `yaml:"gasLimit"`
+	TokenGasLimit     uint64 `yaml:"tokenGasLimit"`
 }
 
 type Callback struct {

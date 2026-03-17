@@ -13,6 +13,8 @@ type Store interface {
 	AutoMigrate() error
 	CreateWallet(ctx context.Context, wallet *models.WalletEntity) error
 	GetWalletByNo(ctx context.Context, walletNo string) (*models.WalletEntity, error)
+	GetWalletsByNo(ctx context.Context, walletNo string) ([]models.WalletEntity, error)
+	GetWalletByNoAndNetwork(ctx context.Context, walletNo string, network string) (*models.WalletEntity, error)
 	GetWalletByAddress(ctx context.Context, network string, address string) (*models.WalletEntity, error)
 	ListActiveWallets(ctx context.Context, network string) ([]models.WalletEntity, error)
 	GetConnectorCallback(ctx context.Context, txCode string, callbackType string) (*models.ConnectorCallbackEntity, error)
@@ -24,6 +26,9 @@ type Store interface {
 	FindIncomingTransaction(ctx context.Context, walletNo string, txHash string, tokenAddress string) (*models.TransactionEntity, error)
 	UpdateTransaction(ctx context.Context, tx *models.TransactionEntity) error
 	QueryHistory(ctx context.Context, req models.TransactionHistoryQueryRequest) ([]models.TransactionEntity, error)
+	UpsertSignatureKey(ctx context.Context, key *models.SignatureKeyEntity) error
+	GetSignatureKeyByID(ctx context.Context, publickeyID string) (*models.SignatureKeyEntity, error)
+	ListSignatureKeys(ctx context.Context) ([]models.SignatureKeyEntity, error)
 }
 
 func New(db *gorm.DB) Store {
@@ -35,7 +40,25 @@ type gormStore struct {
 }
 
 func (s *gormStore) AutoMigrate() error {
-	return s.db.AutoMigrate(&models.WalletEntity{}, &models.TransactionEntity{}, &models.ConnectorCallbackEntity{})
+	if err := s.db.AutoMigrate(&models.WalletEntity{}, &models.TransactionEntity{}, &models.ConnectorCallbackEntity{}, &models.SignatureKeyEntity{}); err != nil {
+		return err
+	}
+	migrator := s.db.Migrator()
+	for _, indexName := range []string{"idx_wallets_wallet_no", "wallet_no"} {
+		if migrator.HasIndex(&models.WalletEntity{}, indexName) {
+			if err := migrator.DropIndex(&models.WalletEntity{}, indexName); err != nil {
+				return err
+			}
+		}
+	}
+	for _, indexName := range []string{"uk_wallet_network", "uk_network_address"} {
+		if !migrator.HasIndex(&models.WalletEntity{}, indexName) {
+			if err := migrator.CreateIndex(&models.WalletEntity{}, indexName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *gormStore) CreateWallet(ctx context.Context, wallet *models.WalletEntity) error {
@@ -45,6 +68,26 @@ func (s *gormStore) CreateWallet(ctx context.Context, wallet *models.WalletEntit
 func (s *gormStore) GetWalletByNo(ctx context.Context, walletNo string) (*models.WalletEntity, error) {
 	var wallet models.WalletEntity
 	err := s.db.WithContext(ctx).Where("wallet_no = ?", walletNo).First(&wallet).Error
+	if err != nil {
+		return nil, err
+	}
+	return &wallet, nil
+}
+
+func (s *gormStore) GetWalletsByNo(ctx context.Context, walletNo string) ([]models.WalletEntity, error) {
+	var wallets []models.WalletEntity
+	if err := s.db.WithContext(ctx).Where("wallet_no = ?", walletNo).Order("network ASC").Find(&wallets).Error; err != nil {
+		return nil, err
+	}
+	if len(wallets) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return wallets, nil
+}
+
+func (s *gormStore) GetWalletByNoAndNetwork(ctx context.Context, walletNo string, network string) (*models.WalletEntity, error) {
+	var wallet models.WalletEntity
+	err := s.db.WithContext(ctx).Where("wallet_no = ? AND network = ?", walletNo, network).First(&wallet).Error
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +193,36 @@ func (s *gormStore) QueryHistory(ctx context.Context, req models.TransactionHist
 	}
 	err := q.Order("created_at DESC").Limit(req.PageSize).Find(&items).Error
 	return items, err
+}
+
+func (s *gormStore) UpsertSignatureKey(ctx context.Context, key *models.SignatureKeyEntity) error {
+	var existing models.SignatureKeyEntity
+	err := s.db.WithContext(ctx).Where("publickey_id = ?", key.PublickeyID).First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return s.db.WithContext(ctx).Create(key).Error
+		}
+		return err
+	}
+	existing.PublicKey = key.PublicKey
+	existing.PrivateKey = key.PrivateKey
+	return s.db.WithContext(ctx).Save(&existing).Error
+}
+
+func (s *gormStore) GetSignatureKeyByID(ctx context.Context, publickeyID string) (*models.SignatureKeyEntity, error) {
+	var key models.SignatureKeyEntity
+	if err := s.db.WithContext(ctx).Where("publickey_id = ?", publickeyID).First(&key).Error; err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (s *gormStore) ListSignatureKeys(ctx context.Context) ([]models.SignatureKeyEntity, error) {
+	var keys []models.SignatureKeyEntity
+	if err := s.db.WithContext(ctx).Order("publickey_id ASC").Find(&keys).Error; err != nil {
+		return nil, err
+	}
+	return keys, nil
 }
 
 func IsNotFound(err error) bool {

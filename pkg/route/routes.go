@@ -43,8 +43,16 @@ func InstallRoutes(r *gin.Engine) {
 	rootGroup := r.Group("/api/v1")
 	rootGroup.Use(middleware.RequestSignatureMiddleware())
 
+	adminGroup := r.Group("/api/v1/admin")
+	adminGroup.Use(middleware.BasicAuthMiddleware())
+
 	{
 		rootGroup.GET("/ping", controller.Ping)
+	}
+
+	{
+		signatureKeyController := controller.NewSignatureKeyController()
+		adminGroup.POST("/signature/key/upsert", signatureKeyController.Upsert)
 	}
 
 	{

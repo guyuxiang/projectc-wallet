@@ -62,61 +62,6 @@ var flagsOpts = []flagOpt{
 		optUsage:        "mysql max open connections",
 	},
 	{
-		optName:         FLAG_KEY_RABBIT_URL,
-		optDefaultValue: "",
-		optUsage:        "rabbitmq connection url",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_VHOST,
-		optDefaultValue: "",
-		optUsage:        "rabbitmq virtual host",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_EXCH,
-		optDefaultValue: "tx_callback_fanout_exchange",
-		optUsage:        "rabbitmq exchange",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_CANCEL,
-		optDefaultValue: "tx_callback_cancel_fanout_exchange",
-		optUsage:        "rabbitmq cancel exchange",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_TYPE,
-		optDefaultValue: "fanout",
-		optUsage:        "rabbitmq exchange type",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_QUEUE,
-		optDefaultValue: "projectc-custodial-wallet.queue",
-		optUsage:        "rabbitmq queue",
-	},
-	{
-		optName:         FLAG_KEY_RABBIT_ROUTING,
-		optDefaultValue: "",
-		optUsage:        "rabbitmq routing key",
-	},
-	{
-		optName:         FLAG_KEY_SIGN_API_KEY,
-		optDefaultValue: "",
-		optUsage:        "request signature api key",
-	},
-	{
-		optName:         FLAG_KEY_SIGN_PUBLIC,
-		optDefaultValue: "",
-		optUsage:        "request signature public key",
-	},
-	{
-		optName:         FLAG_KEY_SIGN_PRIVATE,
-		optDefaultValue: "",
-		optUsage:        "request signature private key",
-	},
-	{
-		optName:         FLAG_KEY_SIGN_SKEW,
-		optDefaultValue: int64(300000),
-		optUsage:        "request signature max skew millis",
-	},
-	{
 		optName:         FLAG_KEY_KMS_BASE_URL,
 		optDefaultValue: "",
 		optUsage:        "kms service base url",

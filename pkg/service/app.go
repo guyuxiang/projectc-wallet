@@ -10,7 +10,8 @@ import (
 )
 
 type App struct {
-	Wallet WalletService
+	Wallet       WalletService
+	SignatureKey SignatureKeyService
 }
 
 var app *App
@@ -28,11 +29,15 @@ func InitApp(cfg *config.Config, db *gorm.DB) error {
 	httpClient := &http.Client{Timeout: timeout}
 
 	svc := NewWalletService(cfg, st, httpClient)
+	signatureSvc := NewSignatureKeyService(st)
+	if err := svc.EnsureWalletNetworks(); err != nil {
+		return err
+	}
 	if err := svc.SyncSubscriptions(); err != nil {
 		return err
 	}
 
-	app = &App{Wallet: svc}
+	app = &App{Wallet: svc, SignatureKey: signatureSvc}
 	return nil
 }
 

@@ -17,28 +17,18 @@ mysql:
   database: "projectc-custodial-wallet"
   maxIdleConns: 200
   maxOpenConns: 200
-rabbitmq:
-  url: "amqp://admin:admin@dev-mq.lls.com:5672//projectc-dtt"
-  exchange: "tx_callback_fanout_exchange"
-  cancelExchange: "tx_callback_cancel_fanout_exchange"
-  exchangeType: "fanout"
-  queue: "projectc-custodial-wallet.queue"
-  routingKey: ""
-signature:
-  apiKey: "replace-me"
-  publicKey: "replace-me"
-  privateKey: "replace-me"
-  maxSkewMillis: 300000
 kms:
   baseUrl: "http://unblock-kms-svc"
   username: "test"
   password: "test"
-connector:
-  baseUrl: "http://unblock-solana-connector"
-  username: "test"
-  password: "test"
-  networkCode: "solana"
-  nativeTokenSymbol: "SOL"
+connectors:
+  solana:
+    baseUrl: "http://unblock-solana-connector"
+    username: "test"
+    password: "test"
+    driver: "solana"
+    networkCode: "solana"
+    nativeTokenSymbol: "SOL"
 callback:
   depositUrl: ""
   transferOutUrl: ""

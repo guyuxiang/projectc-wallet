@@ -23,6 +23,180 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/signature/key/upsert": {
+            "post": {
+                "description": "Persist or update a signature key pair by publickeyId.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SignatureKey"
+                ],
+                "summary": "UpsertSignatureKey",
+                "parameters": [
+                    {
+                        "description": "Signature key upsert request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.SignatureKeyUpsertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/inner/wallet/callback/rollback": {
+            "post": {
+                "description": "Receive rollback callback pushed by connector and mark related wallet transactions as failed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wallet"
+                ],
+                "summary": "ReceiveRollbackCallback",
+                "parameters": [
+                    {
+                        "description": "Connector transaction rollback callback request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ConnectorTxRollbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/inner/wallet/callback/tx": {
+            "post": {
+                "description": "Receive transaction callback pushed by connector and update wallet transactions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wallet"
+                ],
+                "summary": "ReceiveTxCallback",
+                "parameters": [
+                    {
+                        "description": "Connector transaction callback request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ConnectorTxCallbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/todo/get": {
             "get": {
                 "description": "Get todo demo response.",
@@ -69,7 +243,7 @@ const docTemplate = `{
         },
         "/wallet/create": {
             "post": {
-                "description": "Create a centralized wallet and subscribe its Solana address.",
+                "description": "Create a master walletNo and automatically create addresses for all configured networks.",
                 "consumes": [
                     "application/json"
                 ],
@@ -82,7 +256,7 @@ const docTemplate = `{
                 "summary": "CreateWallet",
                 "parameters": [
                     {
-                        "description": "Create wallet request",
+                        "description": "Create wallet request, no parameters required",
                         "name": "request",
                         "in": "body",
                         "schema": {
@@ -126,7 +300,7 @@ const docTemplate = `{
         },
         "/wallet/info/query": {
             "post": {
-                "description": "Query wallet token balances.",
+                "description": "Query token balances of a wallet. When network is specified, return balances under that network; when network is empty, aggregate balances across all supported networks under the master walletNo.",
                 "consumes": [
                     "application/json"
                 ],
@@ -300,7 +474,7 @@ const docTemplate = `{
         },
         "/wallet/transfer/out": {
             "post": {
-                "description": "Submit a wallet transfer-out request for native SOL or configured SPL tokens.",
+                "description": "Submit a wallet transfer-out request by tokenSymbol for the specified network.",
                 "consumes": [
                     "application/json"
                 ],
@@ -313,7 +487,7 @@ const docTemplate = `{
                 "summary": "TransferOut",
                 "parameters": [
                     {
-                        "description": "Transfer out request",
+                        "description": "Transfer out request, tokenSymbol is used instead of tokenAddress",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -358,7 +532,7 @@ const docTemplate = `{
         },
         "/wallet/transfer/out/query": {
             "post": {
-                "description": "Query transferable assets of a wallet, including native token and configured SPL tokens.",
+                "description": "Query transferable assets of a wallet under a specific network, including native token and configured network tokens.",
                 "consumes": [
                     "application/json"
                 ],
@@ -416,6 +590,75 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "models.ConnectorChainEvent": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ConnectorChainTx": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "networkCode": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ConnectorTxCallbackRequest": {
+            "type": "object",
+            "properties": {
+                "tx": {
+                    "$ref": "#/definitions/models.ConnectorChainTx"
+                },
+                "txEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ConnectorChainEvent"
+                    }
+                }
+            }
+        },
+        "models.ConnectorTxRollbackRequest": {
+            "type": "object",
+            "properties": {
+                "networkCode": {
+                    "type": "string"
+                },
+                "txCode": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Response": {
             "type": "object",
             "properties": {
@@ -424,6 +667,25 @@ const docTemplate = `{
                 },
                 "data": {},
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SignatureKeyUpsertRequest": {
+            "type": "object",
+            "required": [
+                "privateKey",
+                "publicKey",
+                "publickeyId"
+            ],
+            "properties": {
+                "privateKey": {
+                    "type": "string"
+                },
+                "publicKey": {
+                    "type": "string"
+                },
+                "publickeyId": {
                     "type": "string"
                 }
             }
@@ -472,6 +734,9 @@ const docTemplate = `{
                 "walletNo"
             ],
             "properties": {
+                "network": {
+                    "type": "string"
+                },
                 "walletNo": {
                     "type": "string"
                 }
@@ -499,7 +764,7 @@ const docTemplate = `{
                 "toAddress": {
                     "type": "string"
                 },
-                "tokenAddress": {
+                "tokenSymbol": {
                     "type": "string"
                 },
                 "walletNo": {
@@ -516,6 +781,9 @@ const docTemplate = `{
                 "walletNo"
             ],
             "properties": {
+                "network": {
+                    "type": "string"
+                },
                 "walletNo": {
                     "type": "string"
                 }

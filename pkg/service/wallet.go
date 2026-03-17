@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
@@ -21,47 +22,39 @@ import (
 
 type WalletService interface {
 	SyncSubscriptions() error
+	EnsureWalletNetworks() error
 	CreateWallet(ctx context.Context, req models.WalletCreateRequest) (*models.WalletCreateResponse, error)
 	QueryWalletInfo(ctx context.Context, req models.WalletInfoQueryRequest) (*models.WalletInfoQueryResponse, error)
 	QueryTransferOutAssets(ctx context.Context, req models.TransferOutQueryRequest) (*models.TransferOutQueryResponse, error)
 	TransferOut(ctx context.Context, req models.TransferOutRequest) (*models.TransferOutResponse, error)
 	QueryTransaction(ctx context.Context, req models.TransactionQueryRequest) (*models.TransactionQueryResponse, error)
 	QueryHistory(ctx context.Context, req models.TransactionHistoryQueryRequest) (*models.TransactionHistoryQueryResponse, error)
-	StartMQConsumer() error
 	HandleTxCallback(ctx context.Context, req models.ConnectorTxCallbackRequest) error
 	HandleRollbackCallback(ctx context.Context, req models.ConnectorTxRollbackRequest) error
 }
 
 func NewWalletService(cfg *config.Config, st store.Store, httpClient *http.Client) WalletService {
-	return &walletService{
+	svc := &walletService{
 		cfg:        cfg,
 		store:      st,
 		httpClient: httpClient,
 	}
+	svc.providers = buildNetworkProviders(svc)
+	return svc
 }
 
 type walletService struct {
 	cfg        *config.Config
 	store      store.Store
 	httpClient *http.Client
-	mqOnce     sync.Once
+	providers  map[string]networkWalletProvider
 }
 
 func (s *walletService) SyncSubscriptions() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	wallets, err := s.store.ListActiveWallets(ctx, s.networkCode())
-	if err != nil {
-		return err
-	}
-	for _, wallet := range wallets {
-		if !wallet.DepositEnabled {
-			continue
-		}
-		if err := s.connectorPost(ctx, "/api/v1/inner/chain-data-subscribe/solana/address-subscribe", map[string]string{
-			"address": wallet.Address,
-		}, nil); err != nil {
+	for _, provider := range s.providers {
+		if err := provider.SyncSubscriptions(ctx); err != nil {
 			return err
 		}
 	}
@@ -69,320 +62,188 @@ func (s *walletService) SyncSubscriptions() error {
 }
 
 func (s *walletService) CreateWallet(ctx context.Context, req models.WalletCreateRequest) (*models.WalletCreateResponse, error) {
-	network := s.networkCode()
-	walletNo := generateWalletNo()
-	password := generatePassword()
-
-	var keyStoreResp struct {
-		KeystoreId string `json:"keystore_id"`
-	}
-	if err := s.kmsPost(ctx, "/kms/keystore/create", map[string]string{
-		"password": password,
-	}, &keyStoreResp); err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	var addressResp []struct {
-		Network string `json:"chain_type"`
-		Address string `json:"address"`
-	}
-	if err := s.kmsPost(ctx, "/kms/keystore/address/0/0/0", map[string]string{
-		"keystore_id": keyStoreResp.KeystoreId,
-		"password":    password,
-	}, &addressResp); err != nil {
-		var wrappedAddressResp struct {
-			KeyAddress []struct {
-				Network string `json:"chain_type"`
-				Address string `json:"address"`
-			} `json:"key_address"`
-		}
-		if err = s.kmsPost(ctx, "/kms/keystore/address/0/0/0", map[string]string{
-			"keystore_id": keyStoreResp.KeystoreId,
-			"password":    password,
-		}, &wrappedAddressResp); err != nil {
-			return nil, wrapSystemError(err)
-		}
-		addressResp = wrappedAddressResp.KeyAddress
-	}
-
-	address := ""
-	for _, item := range addressResp {
-		if strings.EqualFold(item.Network, network) {
-			address = item.Address
-			break
-		}
-	}
-	if address == "" {
-		return nil, newAppError(models.CodeSystemBusy, "failed to derive wallet address")
-	}
-
-	wallet := &models.WalletEntity{
-		WalletNo:        walletNo,
-		Network:         network,
-		Address:         address,
-		KMSKeystoreID:   keyStoreResp.KeystoreId,
-		KMSPassword:     password,
-		KMSKeyType:      "mnemonic",
-		AccountIndex:    "0",
-		ChangeIndex:     "0",
-		AddressIndex:    "0",
-		DepositEnabled:  true,
-		TransferEnabled: true,
-		Status:          "ACTIVE",
-	}
-	if err := s.store.CreateWallet(ctx, wallet); err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	if err := s.connectorPost(ctx, "/api/v1/inner/chain-data-subscribe/solana/address-subscribe", map[string]string{
-		"address": address,
-	}, nil); err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	return &models.WalletCreateResponse{
-		WalletNo:   wallet.WalletNo,
-		Network:    wallet.Network,
-		Address:    wallet.Address,
-		KeystoreID: wallet.KMSKeystoreID,
-	}, nil
+	return s.createWallets(ctx, "", "")
 }
 
-func (s *walletService) QueryWalletInfo(ctx context.Context, req models.WalletInfoQueryRequest) (*models.WalletInfoQueryResponse, error) {
-	wallet, err := s.getWallet(ctx, req.WalletNo)
+func (s *walletService) EnsureWalletNetworks() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	wallets, err := s.store.ListActiveWallets(ctx, "")
+	if err != nil {
+		return wrapSystemError(err)
+	}
+	seen := make(map[string]struct{}, len(wallets))
+	for _, wallet := range wallets {
+		if strings.TrimSpace(wallet.WalletNo) == "" {
+			continue
+		}
+		if _, ok := seen[wallet.WalletNo]; ok {
+			continue
+		}
+		seen[wallet.WalletNo] = struct{}{}
+		if _, err := s.createWallets(ctx, wallet.WalletNo, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *walletService) createWallets(ctx context.Context, masterWalletNo string, requestedNetwork string) (*models.WalletCreateResponse, error) {
+	networks, err := s.resolveCreateNetworks(requestedNetwork)
 	if err != nil {
 		return nil, err
 	}
+	masterWalletNo = strings.TrimSpace(masterWalletNo)
 
-	items := make([]models.WalletTokenBalance, 0, 8)
-	var nativeResp struct {
-		Balance     float64 `json:"balance"`
-		BalanceUnit string  `json:"balanceUnit"`
+	items := make([]models.WalletCreateItem, 0, len(networks))
+	if masterWalletNo != "" {
+		existingWallets, err := s.getWallets(ctx, masterWalletNo)
+		if err != nil {
+			appErr, ok := err.(*AppError)
+			if !ok || appErr.Code != models.CodeWalletNotFound {
+				return nil, err
+			}
+		} else {
+			existingByNetwork := make(map[string]models.WalletCreateItem, len(existingWallets))
+			for _, wallet := range existingWallets {
+				existingByNetwork[normalizedNetwork(wallet.Network)] = models.WalletCreateItem{
+					WalletNo:   wallet.WalletNo,
+					Network:    wallet.Network,
+					Address:    wallet.Address,
+					KeystoreID: wallet.KMSKeystoreID,
+				}
+			}
+			filtered := make([]string, 0, len(networks))
+			for _, network := range networks {
+				if item, ok := existingByNetwork[network]; ok {
+					items = append(items, item)
+					continue
+				}
+				filtered = append(filtered, network)
+			}
+			networks = filtered
+		}
 	}
-	if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/address-balance", map[string]string{
-		"address": wallet.Address,
-	}, &nativeResp); err != nil {
-		return nil, wrapSystemError(err)
-	}
-	items = append(items, models.WalletTokenBalance{
-		TokenSymbol: s.nativeTokenSymbol(),
-		Balance:     formatFloat(nativeResp.Balance),
-	})
 
-	tokens, err := s.listConnectorTokens(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, token := range tokens {
-		var tokenResp struct {
-			Value float64 `json:"value"`
+	for _, network := range networks {
+		provider, err := s.provider(network)
+		if err != nil {
+			return nil, err
 		}
-		if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/token-balance", map[string]string{
-			"address":   wallet.Address,
-			"tokenCode": token.Code,
-		}, &tokenResp); err != nil {
-			return nil, wrapSystemError(err)
+		resp, err := provider.CreateWallet(ctx, walletCreateOptions{
+			WalletNo: masterWalletNo,
+			Network:  network,
+		})
+		if err != nil {
+			return nil, err
 		}
-		items = append(items, models.WalletTokenBalance{
-			TokenSymbol: token.Code,
-			Balance:     formatFloat(tokenResp.Value),
+		if masterWalletNo == "" {
+			masterWalletNo = resp.WalletNo
+		}
+		if len(resp.Wallets) > 0 {
+			items = append(items, resp.Wallets[0])
+			continue
+		}
+		items = append(items, models.WalletCreateItem{
+			WalletNo:   resp.WalletNo,
+			Network:    resp.Network,
+			Address:    resp.Address,
+			KeystoreID: resp.KeystoreID,
 		})
 	}
 
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Network < items[j].Network
+	})
+	response := &models.WalletCreateResponse{
+		WalletNo: masterWalletNo,
+		Wallets:  items,
+	}
+	if len(items) == 1 {
+		response.Network = items[0].Network
+		response.Address = items[0].Address
+		response.KeystoreID = items[0].KeystoreID
+	}
+	return response, nil
+}
+
+func (s *walletService) QueryWalletInfo(ctx context.Context, req models.WalletInfoQueryRequest) (*models.WalletInfoQueryResponse, error) {
+	if normalizedNetwork(req.Network) != "" {
+		wallet, err := s.getWallet(ctx, req.WalletNo, req.Network)
+		if err != nil {
+			return nil, err
+		}
+		provider, _ := s.provider(wallet.Network)
+		return provider.QueryWalletInfo(ctx, wallet, req)
+	}
+
+	wallets, err := s.getWallets(ctx, req.WalletNo)
+	if err != nil {
+		return nil, err
+	}
+	balances := make(map[string]*big.Rat)
+	for _, wallet := range wallets {
+		provider, err := s.provider(wallet.Network)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := provider.QueryWalletInfo(ctx, &wallet, models.WalletInfoQueryRequest{
+			WalletNo: req.WalletNo,
+			Network:  wallet.Network,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, token := range resp.Tokens {
+			if _, ok := balances[token.TokenSymbol]; !ok {
+				balances[token.TokenSymbol] = new(big.Rat)
+			}
+			if err := addDecimalString(balances[token.TokenSymbol], token.Balance); err != nil {
+				return nil, newAppError(models.CodeSystemBusy, err.Error())
+			}
+		}
+	}
+
+	tokenSymbols := make([]string, 0, len(balances))
+	for symbol := range balances {
+		tokenSymbols = append(tokenSymbols, symbol)
+	}
+	sort.Strings(tokenSymbols)
+
+	items := make([]models.WalletTokenBalance, 0, len(tokenSymbols))
+	for _, symbol := range tokenSymbols {
+		items = append(items, models.WalletTokenBalance{
+			TokenSymbol: symbol,
+			Balance:     balances[symbol].FloatString(6),
+		})
+	}
 	return &models.WalletInfoQueryResponse{
-		WalletNo: wallet.WalletNo,
+		WalletNo: req.WalletNo,
 		Tokens:   items,
 	}, nil
 }
 
 func (s *walletService) QueryTransferOutAssets(ctx context.Context, req models.TransferOutQueryRequest) (*models.TransferOutQueryResponse, error) {
-	wallet, err := s.getWallet(ctx, req.WalletNo)
+	wallet, err := s.getWallet(ctx, req.WalletNo, req.Network)
 	if err != nil {
 		return nil, err
 	}
-	if !wallet.TransferEnabled {
-		return nil, newAppError(models.CodePermissionDenied, "wallet transfer is disabled")
-	}
-
-	assets := []models.TransferableAsset{
-		{
-			Network:      wallet.Network,
-			TokenAddress: models.TokenNative,
-			TokenSymbol:  s.nativeTokenSymbol(),
-		},
-	}
-	tokens, err := s.listConnectorTokens(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, token := range tokens {
-		assets = append(assets, models.TransferableAsset{
-			Network:      wallet.Network,
-			TokenAddress: token.MintAddress,
-			TokenSymbol:  token.Code,
-		})
-	}
-	return &models.TransferOutQueryResponse{
-		WalletNo:  wallet.WalletNo,
-		AssetList: assets,
-	}, nil
+	provider, _ := s.provider(wallet.Network)
+	return provider.QueryTransferOutAssets(ctx, wallet, req)
 }
 
 func (s *walletService) TransferOut(ctx context.Context, req models.TransferOutRequest) (*models.TransferOutResponse, error) {
-	network := strings.ToLower(strings.TrimSpace(req.Network))
-	if network != s.networkCode() {
-		return nil, newAppError(models.CodeNetworkUnsupported, "network not supported")
-	}
-	tokenAddress := normalizeTokenAddress(req.TokenAddress)
-	if !validateSolanaAddress(req.ToAddress) {
-		return nil, newAppError(models.CodeAddressInvalid, "invalid solana address")
-	}
-
-	if existing, err := s.store.GetTransactionByRequestNo(ctx, req.RequestNo); err == nil {
-		return &models.TransferOutResponse{
-			TransactionNo: existing.TransactionNo,
-			RequestNo:     existing.RequestNo,
-		}, nil
-	} else if err != nil && !store.IsNotFound(err) {
-		return nil, wrapSystemError(err)
-	}
-
-	wallet, err := s.getWallet(ctx, req.WalletNo)
+	wallet, err := s.getWallet(ctx, req.WalletNo, req.Network)
 	if err != nil {
 		return nil, err
 	}
-	if !wallet.TransferEnabled {
-		return nil, newAppError(models.CodePermissionDenied, "wallet transfer is disabled")
+	if req.Network != "" && normalizedNetwork(req.Network) != normalizedNetwork(wallet.Network) {
+		return nil, newAppError(models.CodeNetworkUnsupported, "network not supported")
 	}
-
-	if s.cfg == nil || s.cfg.Solana == nil || s.cfg.Solana.RPCEndpoint == "" {
-		return nil, newAppError(models.CodeSystemBusy, "solana rpc endpoint is not configured")
-	}
-	blockhash, err := fetchLatestBlockhash(ctx, s.httpClient, s.cfg.Solana.RPCEndpoint)
-	if err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	var signResult *kmsSignResponse
-	tokenSymbol := s.nativeTokenSymbol()
-	requestAmount := normalizeAmountString(req.Amount)
-	if tokenAddress == models.TokenNative {
-		if _, err := amountToLamports(req.Amount); err != nil {
-			return nil, newAppError(models.CodeParamError, err.Error())
-		}
-		var balanceResp struct {
-			Balance float64 `json:"balance"`
-		}
-		if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/address-balance", map[string]string{
-			"address": wallet.Address,
-		}, &balanceResp); err != nil {
-			return nil, wrapSystemError(err)
-		}
-		requestAmountValue, _ := parseAmount(req.Amount)
-		if balanceResp.Balance < requestAmountValue {
-			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
-		}
-		lamports, _ := amountToLamports(req.Amount)
-		unsignedTx, err := buildUnsignedNativeTransferTx(wallet.Address, req.ToAddress, blockhash, lamports, s.computeUnitPrice())
-		if err != nil {
-			return nil, wrapSystemError(err)
-		}
-		signResult, err = s.signSolanaTransaction(ctx, wallet, unsignedTx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		tokenMeta, err := s.findConnectorTokenByMint(ctx, tokenAddress)
-		if err != nil {
-			return nil, err
-		}
-		var tokenBalanceResp struct {
-			Value float64 `json:"value"`
-		}
-		if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/token-balance", map[string]string{
-			"address":   wallet.Address,
-			"tokenCode": tokenMeta.Code,
-		}, &tokenBalanceResp); err != nil {
-			return nil, wrapSystemError(err)
-		}
-		requestAmountValue, err := parseAmount(req.Amount)
-		if err != nil {
-			return nil, newAppError(models.CodeParamError, err.Error())
-		}
-		if tokenBalanceResp.Value < requestAmountValue {
-			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
-		}
-		sourceAccounts, err := fetchTokenAccountsByOwner(ctx, s.httpClient, s.cfg.Solana.RPCEndpoint, wallet.Address, tokenMeta.MintAddress)
-		if err != nil {
-			return nil, wrapSystemError(err)
-		}
-		if len(sourceAccounts) == 0 {
-			return nil, newAppError(models.CodeInsufficient, "source token account not found")
-		}
-		destAccounts, err := fetchTokenAccountsByOwner(ctx, s.httpClient, s.cfg.Solana.RPCEndpoint, req.ToAddress, tokenMeta.MintAddress)
-		if err != nil {
-			return nil, wrapSystemError(err)
-		}
-		sourceTokenAccount := sourceAccounts[0].Pubkey
-		destinationTokenAccount := ""
-		createATA := false
-		if len(destAccounts) > 0 {
-			destinationTokenAccount = destAccounts[0].Pubkey
-		} else {
-			destinationTokenAccount, createATA, err = deriveAssociatedTokenAddress(req.ToAddress, tokenMeta.MintAddress)
-			if err != nil {
-				return nil, newAppError(models.CodeAddressInvalid, "invalid destination address")
-			}
-		}
-		baseUnits, err := amountToTokenUnits(req.Amount, tokenMeta.Decimals)
-		if err != nil {
-			return nil, newAppError(models.CodeParamError, err.Error())
-		}
-		unsignedTx, err := buildUnsignedSPLTransferTx(wallet.Address, req.ToAddress, tokenMeta.MintAddress, sourceTokenAccount, destinationTokenAccount, blockhash, baseUnits, tokenMeta.Decimals, s.computeUnitPrice(), createATA)
-		if err != nil {
-			return nil, wrapSystemError(err)
-		}
-		signResult, err = s.signSolanaTransaction(ctx, wallet, unsignedTx)
-		if err != nil {
-			return nil, err
-		}
-		tokenSymbol = tokenMeta.Code
-		requestAmount = normalizeAmountString(req.Amount)
-	}
-
-	var sendResp struct {
-		TxCode string `json:"txCode"`
-	}
-	if err := s.connectorPost(ctx, "/api/v1/inner/chain-invoke/solana/common/tx-send", map[string]string{
-		"txSignResult": signResult.Signature,
-	}, &sendResp); err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	tx := &models.TransactionEntity{
-		TransactionNo: generateID("T"),
-		RequestNo:     req.RequestNo,
-		Direction:     models.DirectionOut,
-		WalletNo:      wallet.WalletNo,
-		Network:       wallet.Network,
-		FromAddress:   wallet.Address,
-		ToAddress:     req.ToAddress,
-		TokenAddress:  tokenAddress,
-		TokenSymbol:   tokenSymbol,
-		Amount:        requestAmount,
-		TxHash:        sendResp.TxCode,
-		Status:        models.StatusProcessing,
-	}
-	if err := s.store.CreateTransaction(ctx, tx); err != nil {
-		return nil, wrapSystemError(err)
-	}
-
-	go s.notifyTransferOutResult(context.Background(), tx)
-
-	return &models.TransferOutResponse{
-		TransactionNo: tx.TransactionNo,
-		RequestNo:     tx.RequestNo,
-	}, nil
+	provider, _ := s.provider(wallet.Network)
+	req.Network = wallet.Network
+	return provider.TransferOut(ctx, wallet, req)
 }
 
 func (s *walletService) QueryTransaction(ctx context.Context, req models.TransactionQueryRequest) (*models.TransactionQueryResponse, error) {
@@ -406,7 +267,7 @@ func (s *walletService) QueryHistory(ctx context.Context, req models.Transaction
 	if req.Direction != "" && req.Direction != models.DirectionIn && req.Direction != models.DirectionOut {
 		return nil, newAppError(models.CodeParamError, "direction must be IN or OUT")
 	}
-	if _, err := s.getWallet(ctx, req.WalletNo); err != nil {
+	if _, err := s.getWallets(ctx, req.WalletNo); err != nil {
 		return nil, err
 	}
 
@@ -441,64 +302,11 @@ func (s *walletService) QueryHistory(ctx context.Context, req models.Transaction
 	return &models.TransactionHistoryQueryResponse{Items: items, NextCursor: nextCursor}, nil
 }
 
-func (s *walletService) getWallet(ctx context.Context, walletNo string) (*models.WalletEntity, error) {
-	wallet, err := s.store.GetWalletByNo(ctx, walletNo)
-	if err != nil {
-		if store.IsNotFound(err) {
-			return nil, newAppError(models.CodeWalletNotFound, "wallet not found")
-		}
-		return nil, wrapSystemError(err)
-	}
-	if strings.ToUpper(wallet.Status) != "ACTIVE" {
-		return nil, newAppError(models.CodeStatusInvalid, "wallet status is not active")
-	}
-	if wallet.Network != s.networkCode() {
-		return nil, newAppError(models.CodeNetworkUnsupported, "network not supported")
-	}
-	return wallet, nil
-}
-
 type connectorToken struct {
 	Code        string `json:"code"`
 	NetworkCode string `json:"networkCode"`
 	MintAddress string `json:"mintAddress"`
 	Decimals    uint8  `json:"decimals"`
-}
-
-func (s *walletService) listConnectorTokens(ctx context.Context) ([]connectorToken, error) {
-	var resp struct {
-		Tokens []connectorToken `json:"tokens"`
-	}
-	if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/token-list", map[string]string{
-		"networkCode": s.networkCode(),
-	}, &resp); err != nil {
-		return nil, wrapSystemError(err)
-	}
-	return resp.Tokens, nil
-}
-
-func (s *walletService) getConnectorToken(ctx context.Context, tokenCode string) (*connectorToken, error) {
-	var resp connectorToken
-	if err := s.connectorPost(ctx, "/api/v1/inner/chain-data/solana/common/token-get", map[string]string{
-		"code": tokenCode,
-	}, &resp); err != nil {
-		return nil, wrapSystemError(err)
-	}
-	return &resp, nil
-}
-
-func (s *walletService) findConnectorTokenByMint(ctx context.Context, mintAddress string) (*connectorToken, error) {
-	tokens, err := s.listConnectorTokens(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, token := range tokens {
-		if strings.EqualFold(token.MintAddress, mintAddress) {
-			tokenCopy := token
-			return &tokenCopy, nil
-		}
-	}
-	return nil, newAppError(models.CodeTokenUnsupported, "token not supported")
 }
 
 type kmsSignResponse struct {
@@ -528,16 +336,29 @@ func (s *walletService) signSolanaTransaction(ctx context.Context, wallet *model
 	return &data, nil
 }
 
-func (s *walletService) connectorPost(ctx context.Context, path string, reqBody interface{}, data interface{}) error {
-	baseURL := ""
-	username := ""
-	password := ""
-	if s.cfg != nil && s.cfg.Connector != nil {
-		baseURL = s.cfg.Connector.BaseURL
-		username = s.cfg.Connector.Username
-		password = s.cfg.Connector.Password
+func (s *walletService) signEVMTransaction(ctx context.Context, wallet *models.WalletEntity, unsignedTx string) (*kmsSignResponse, error) {
+	if strings.TrimSpace(unsignedTx) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "empty unsigned evm transaction")
 	}
-	return s.doJSONRequest(ctx, baseURL, path, username, password, reqBody, data)
+	body := map[string]string{
+		"keystore_id": wallet.KMSKeystoreID,
+		"password":    wallet.KMSPassword,
+		"tx_json":     unsignedTx,
+	}
+	var data kmsSignResponse
+	var path string
+	switch strings.ToLower(wallet.KMSKeyType) {
+	case "privatekey", "evm", "ethereum":
+		path = "/kms/privatekey/sign-tx/evm"
+	case "mnemonic":
+		path = fmt.Sprintf("/kms/mnemonic/sign-tx/evm/%s/%s/%s", defaultIndex(wallet.AccountIndex), defaultIndex(wallet.ChangeIndex), defaultIndex(wallet.AddressIndex))
+	default:
+		return nil, newAppError(models.CodeSystemBusy, "unsupported kms key type")
+	}
+	if err := s.kmsPost(ctx, path, body, &data); err != nil {
+		return nil, wrapSystemError(err)
+	}
+	return &data, nil
 }
 
 func (s *walletService) kmsPost(ctx context.Context, path string, reqBody interface{}, data interface{}) error {
@@ -676,13 +497,19 @@ func (s *walletService) postSignedCallback(ctx context.Context, url string, payl
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if s.cfg == nil || s.cfg.Signature == nil || s.cfg.Signature.APIKey == "" || s.cfg.Signature.PrivateKey == "" {
-		return fmt.Errorf("signature config is incomplete")
+	if GetApp() == nil || GetApp().SignatureKey == nil {
+		return fmt.Errorf("signature service is unavailable")
 	}
-	apiKey := s.cfg.Signature.APIKey
+	publickeyID, signKey, err := GetApp().SignatureKey.DefaultKey()
+	if err != nil {
+		return err
+	}
+	if publickeyID == "" || signKey == nil || signKey.PrivateKey == "" {
+		return fmt.Errorf("signature key is not configured")
+	}
 	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	signatureValue, err := signature.SignBase64(
-		s.cfg.Signature.PrivateKey,
+		signKey.PrivateKey,
 		req.Method,
 		req.URL.Path,
 		req.URL.RawQuery,
@@ -692,7 +519,7 @@ func (s *walletService) postSignedCallback(ctx context.Context, url string, payl
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-API-Key", apiKey)
+	req.Header.Set("X-Publickey-ID", publickeyID)
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Signature", signatureValue)
 	resp, err := s.httpClient.Do(req)
@@ -773,14 +600,26 @@ func normalizeAmountString(v string) string {
 	return formatFloat(value)
 }
 
-func normalizeTokenAddress(v string) string {
+func normalizeTokenSymbol(v string, nativeSymbol string) string {
 	if strings.TrimSpace(v) == "" {
-		return models.TokenNative
+		return strings.ToUpper(strings.TrimSpace(nativeSymbol))
 	}
 	if strings.EqualFold(strings.TrimSpace(v), models.TokenNative) {
-		return models.TokenNative
+		return strings.ToUpper(strings.TrimSpace(nativeSymbol))
 	}
-	return strings.TrimSpace(v)
+	return strings.ToUpper(strings.TrimSpace(v))
+}
+
+func addDecimalString(dst *big.Rat, value string) error {
+	if dst == nil {
+		return fmt.Errorf("nil destination")
+	}
+	parsed, ok := new(big.Rat).SetString(strings.TrimSpace(value))
+	if !ok {
+		return fmt.Errorf("invalid decimal value: %s", value)
+	}
+	dst.Add(dst, parsed)
+	return nil
 }
 
 func defaultIndex(v string) string {
@@ -788,20 +627,6 @@ func defaultIndex(v string) string {
 		return "0"
 	}
 	return strings.TrimSpace(v)
-}
-
-func (s *walletService) networkCode() string {
-	if s.cfg != nil && s.cfg.Connector != nil && s.cfg.Connector.NetworkCode != "" {
-		return strings.ToLower(s.cfg.Connector.NetworkCode)
-	}
-	return models.NetworkSolana
-}
-
-func (s *walletService) nativeTokenSymbol() string {
-	if s.cfg != nil && s.cfg.Connector != nil && s.cfg.Connector.NativeTokenSymbol != "" {
-		return s.cfg.Connector.NativeTokenSymbol
-	}
-	return "SOL"
 }
 
 func (s *walletService) computeUnitPrice() uint64 {

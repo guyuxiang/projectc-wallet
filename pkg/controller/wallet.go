@@ -31,11 +31,11 @@ type walletController struct {
 
 // CreateWallet godoc
 // @Summary CreateWallet
-// @Description Create a centralized wallet and subscribe its Solana address.
+// @Description Create a master walletNo and automatically create addresses for all configured networks.
 // @Tags Wallet
 // @Accept json
 // @Produce json
-// @Param request body models.WalletCreateRequest false "Create wallet request"
+// @Param request body models.WalletCreateRequest false "Create wallet request, no parameters required"
 // @Success 200 {object} models.Response
 // @Failure 400 {object} models.Response
 // @Failure 401 {object} models.Response
@@ -59,7 +59,7 @@ func (wc *walletController) CreateWallet(c *gin.Context) {
 
 // QueryWalletInfo godoc
 // @Summary QueryWalletInfo
-// @Description Query wallet token balances.
+// @Description Query token balances of a wallet. When network is specified, return balances under that network; when network is empty, aggregate balances across all supported networks under the master walletNo.
 // @Tags Wallet
 // @Accept json
 // @Produce json
@@ -85,7 +85,7 @@ func (wc *walletController) QueryWalletInfo(c *gin.Context) {
 
 // QueryTransferOutAssets godoc
 // @Summary QueryTransferOutAssets
-// @Description Query transferable assets of a wallet, including native token and configured SPL tokens.
+// @Description Query transferable assets of a wallet under a specific network, including native token and configured network tokens.
 // @Tags Wallet
 // @Accept json
 // @Produce json
@@ -111,11 +111,11 @@ func (wc *walletController) QueryTransferOutAssets(c *gin.Context) {
 
 // TransferOut godoc
 // @Summary TransferOut
-// @Description Submit a wallet transfer-out request for native SOL or configured SPL tokens.
+// @Description Submit a wallet transfer-out request by tokenSymbol for the specified network.
 // @Tags Wallet
 // @Accept json
 // @Produce json
-// @Param request body models.TransferOutRequest true "Transfer out request"
+// @Param request body models.TransferOutRequest true "Transfer out request, tokenSymbol is used instead of tokenAddress"
 // @Success 200 {object} models.Response
 // @Failure 400 {object} models.Response
 // @Failure 401 {object} models.Response
@@ -187,6 +187,19 @@ func (wc *walletController) QueryHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Response{Code: models.CodeSuccess, Message: "success", Data: resp})
 }
 
+// ReceiveTxCallback godoc
+// @Summary ReceiveTxCallback
+// @Description Receive transaction callback pushed by connector and update wallet transactions.
+// @Tags Wallet
+// @Accept json
+// @Produce json
+// @Param request body models.ConnectorTxCallbackRequest true "Connector transaction callback request"
+// @Success 200 {object} models.Response
+// @Failure 400 {object} models.Response
+// @Failure 401 {object} models.Response
+// @Failure 403 {object} models.Response
+// @Failure 500 {object} models.Response
+// @Router /inner/wallet/callback/tx [post]
 func (wc *walletController) ReceiveTxCallback(c *gin.Context) {
 	var req models.ConnectorTxCallbackRequest
 	if !bindJSON(c, &req) {
@@ -199,6 +212,19 @@ func (wc *walletController) ReceiveTxCallback(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Response{Code: models.CodeSuccess, Message: "success", Data: struct{}{}})
 }
 
+// ReceiveRollbackCallback godoc
+// @Summary ReceiveRollbackCallback
+// @Description Receive rollback callback pushed by connector and mark related wallet transactions as failed.
+// @Tags Wallet
+// @Accept json
+// @Produce json
+// @Param request body models.ConnectorTxRollbackRequest true "Connector transaction rollback callback request"
+// @Success 200 {object} models.Response
+// @Failure 400 {object} models.Response
+// @Failure 401 {object} models.Response
+// @Failure 403 {object} models.Response
+// @Failure 500 {object} models.Response
+// @Router /inner/wallet/callback/rollback [post]
 func (wc *walletController) ReceiveRollbackCallback(c *gin.Context) {
 	var req models.ConnectorTxRollbackRequest
 	if !bindJSON(c, &req) {
