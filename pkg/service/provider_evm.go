@@ -32,18 +32,6 @@ func (p *evmProvider) NetworkCode() string {
 }
 
 func (p *evmProvider) SyncSubscriptions(ctx context.Context) error {
-	wallets, err := p.svc.store.ListActiveWallets(ctx, p.network)
-	if err != nil {
-		return err
-	}
-	for _, wallet := range wallets {
-		if !wallet.DepositEnabled {
-			continue
-		}
-		if err := p.subscribeAddress(ctx, wallet.Address); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -150,9 +138,6 @@ func (p *evmProvider) CreateWallet(ctx context.Context, opts walletCreateOptions
 		Status:          "ACTIVE",
 	}
 	if err := p.svc.store.CreateWallet(ctx, wallet); err != nil {
-		return nil, wrapSystemError(err)
-	}
-	if err := p.subscribeAddress(ctx, address); err != nil {
 		return nil, wrapSystemError(err)
 	}
 
@@ -672,10 +657,7 @@ func (p *evmProvider) HandleRollbackCallback(ctx context.Context, req models.Con
 }
 
 func (p *evmProvider) subscribeAddress(ctx context.Context, address string) error {
-	networkCode := p.svc.connectorNetworkCode(p.network)
-	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/"+networkCode+"/address-subscribe", map[string]string{
-		"address": address,
-	}, nil)
+	return nil
 }
 
 func (p *evmProvider) listConnectorTokens(ctx context.Context) ([]evmToken, error) {

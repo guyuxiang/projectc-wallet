@@ -29,19 +29,6 @@ connectors:
     driver: "solana"
     networkCode: "solana"
     nativeTokenSymbol: "SOL"
-  ethereum:
-    baseUrl: "http://unblock-eth-connector"
-    username: "test"
-    password: "test"
-    driver: "evm"
-    networkCode: "sepolia"
-    nativeTokenSymbol: "ETH"
-    rpcEndpoint: "https://sepolia.gateway.tenderly.co/2xRV8vQTDZE3KmbMjo4jCm"
-    chainId: 11155111
-    bundlerRpcEndpoint: ""
-    entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"
-    enableEip7702: false
-    eip7702Delegator: "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B"
 callback:
   depositUrl: ""
   transferOutUrl: ""
