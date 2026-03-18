@@ -96,7 +96,7 @@ func (s *gormStore) GetWalletByNoAndNetwork(ctx context.Context, walletNo string
 
 func (s *gormStore) GetWalletByAddress(ctx context.Context, network string, address string) (*models.WalletEntity, error) {
 	var wallet models.WalletEntity
-	err := s.db.WithContext(ctx).Where("network = ? AND address = ?", network, address).First(&wallet).Error
+	err := s.db.WithContext(ctx).Where("network = ? AND LOWER(address) = LOWER(?)", network, address).First(&wallet).Error
 	if err != nil {
 		return nil, err
 	}
