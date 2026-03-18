@@ -156,37 +156,53 @@ func (s *walletService) createWallets(ctx context.Context, masterWalletNo string
 }
 
 func (s *walletService) QueryWalletInfo(ctx context.Context, req models.WalletInfoQueryRequest) (*models.WalletInfoQueryResponse, error) {
+	log.Infof("wallet info query start walletNo=%s network=%s", req.WalletNo, req.Network)
 	if normalizedNetwork(req.Network) != "" {
 		wallet, err := s.getWallet(ctx, req.WalletNo, req.Network)
 		if err != nil {
+			log.Warningf("wallet info query failed to resolve wallet walletNo=%s network=%s err=%v", req.WalletNo, req.Network, err)
 			return nil, err
 		}
 		provider, _ := s.provider(wallet.Network)
-		return provider.QueryWalletInfo(ctx, wallet, req)
+		log.Infof("wallet info query dispatch single walletNo=%s network=%s address=%s", wallet.WalletNo, wallet.Network, wallet.Address)
+		resp, err := provider.QueryWalletInfo(ctx, wallet, req)
+		if err != nil {
+			log.Warningf("wallet info query failed walletNo=%s network=%s err=%v", wallet.WalletNo, wallet.Network, err)
+			return nil, err
+		}
+		log.Infof("wallet info query success walletNo=%s network=%s tokenCount=%d", wallet.WalletNo, wallet.Network, len(resp.Tokens))
+		return resp, nil
 	}
 
 	wallets, err := s.getWallets(ctx, req.WalletNo)
 	if err != nil {
+		log.Warningf("wallet info query failed to list wallets walletNo=%s err=%v", req.WalletNo, err)
 		return nil, err
 	}
+	log.Infof("wallet info query aggregate walletNo=%s walletCount=%d", req.WalletNo, len(wallets))
 	balances := make(map[string]*big.Rat)
 	for _, wallet := range wallets {
 		provider, err := s.provider(wallet.Network)
 		if err != nil {
+			log.Warningf("wallet info query failed to load provider walletNo=%s network=%s err=%v", wallet.WalletNo, wallet.Network, err)
 			return nil, err
 		}
+		log.Infof("wallet info query dispatch aggregate walletNo=%s network=%s address=%s", wallet.WalletNo, wallet.Network, wallet.Address)
 		resp, err := provider.QueryWalletInfo(ctx, &wallet, models.WalletInfoQueryRequest{
 			WalletNo: req.WalletNo,
 			Network:  wallet.Network,
 		})
 		if err != nil {
+			log.Warningf("wallet info query aggregate failed walletNo=%s network=%s err=%v", wallet.WalletNo, wallet.Network, err)
 			return nil, err
 		}
+		log.Infof("wallet info query aggregate partial success walletNo=%s network=%s tokenCount=%d", wallet.WalletNo, wallet.Network, len(resp.Tokens))
 		for _, token := range resp.Tokens {
 			if _, ok := balances[token.TokenSymbol]; !ok {
 				balances[token.TokenSymbol] = new(big.Rat)
 			}
 			if err := addDecimalString(balances[token.TokenSymbol], token.Balance); err != nil {
+				log.Warningf("wallet info query aggregate parse balance failed walletNo=%s network=%s token=%s balance=%s err=%v", wallet.WalletNo, wallet.Network, token.TokenSymbol, token.Balance, err)
 				return nil, newAppError(models.CodeSystemBusy, err.Error())
 			}
 		}
@@ -205,10 +221,12 @@ func (s *walletService) QueryWalletInfo(ctx context.Context, req models.WalletIn
 			Balance:     balances[symbol].FloatString(6),
 		})
 	}
-	return &models.WalletInfoQueryResponse{
+	resp := &models.WalletInfoQueryResponse{
 		WalletNo: req.WalletNo,
 		Tokens:   items,
-	}, nil
+	}
+	log.Infof("wallet info query aggregate success walletNo=%s tokenCount=%d", req.WalletNo, len(resp.Tokens))
+	return resp, nil
 }
 
 func (s *walletService) QueryTransferOutAssets(ctx context.Context, req models.TransferOutQueryRequest) (*models.TransferOutQueryResponse, error) {
@@ -431,7 +449,9 @@ func (s *walletService) doJSONRequest(ctx context.Context, baseURL string, path 
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+path, bytes.NewReader(payload))
+	requestURL := strings.TrimRight(baseURL, "/") + path
+	log.Infof("downstream request start url=%s payload=%s", requestURL, truncateLogString(string(payload), 512))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
@@ -449,8 +469,9 @@ func (s *walletService) doJSONRequest(ctx context.Context, baseURL string, path 
 	if err != nil {
 		return err
 	}
+	log.Infof("downstream request done url=%s status=%d body=%s", requestURL, resp.StatusCode, truncateLogString(string(raw), 512))
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("http status=%d body=%s", resp.StatusCode, string(raw))
+		return fmt.Errorf("request url=%s http status=%d body=%s", requestURL, resp.StatusCode, string(raw))
 	}
 
 	var envelope struct {
@@ -471,6 +492,13 @@ func (s *walletService) doJSONRequest(ctx context.Context, baseURL string, path 
 		return nil
 	}
 	return json.Unmarshal(envelope.Data, data)
+}
+
+func truncateLogString(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
 }
 
 func (s *walletService) notifyDeposit(ctx context.Context, tx *models.TransactionEntity) {
