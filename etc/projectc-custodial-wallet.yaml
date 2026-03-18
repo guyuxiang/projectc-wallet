@@ -30,7 +30,7 @@ connectors:
     username: "test"
     password: "test"
     rpcEndpoint: "https://devnet.helius-rpc.com/?api-key=7c8a6828-2b0b-456b-a1fc-f08073e8304a"
-  ethereum:
+  sepolia:
     networkCode: "sepolia"
     driver: "evm"
     nativeTokenSymbol: "ETH"
