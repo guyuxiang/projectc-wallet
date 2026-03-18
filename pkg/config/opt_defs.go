@@ -121,4 +121,9 @@ var flagsOpts = []flagOpt{
 		optDefaultValue: "",
 		optUsage:        "solana rpc endpoint",
 	},
+	{
+		optName:         FLAG_KEY_REQ_SIG_ENABLE,
+		optDefaultValue: true,
+		optUsage:        "enable request signature middleware",
+	},
 }

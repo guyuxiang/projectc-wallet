@@ -3,15 +3,16 @@ package config
 import "fmt"
 
 type Config struct {
-	Server     *Server               `yaml:"server"`
-	Auth       *Auth                 `yaml:"auth"`
-	Gin        *Gin                  `yaml:"gin"`
-	Log        *Log                  `yaml:"log"`
-	MySQL      *MySQL                `yaml:"mysql"`
-	KMS        *KMS                  `yaml:"kms"`
-	Connector  *Connector            `yaml:"connector"`
-	Connectors map[string]*Connector `yaml:"connectors"`
-	Callback   *Callback             `yaml:"callback"`
+	Server           *Server               `yaml:"server"`
+	Auth             *Auth                 `yaml:"auth"`
+	Gin              *Gin                  `yaml:"gin"`
+	Log              *Log                  `yaml:"log"`
+	MySQL            *MySQL                `yaml:"mysql"`
+	KMS              *KMS                  `yaml:"kms"`
+	Connector        *Connector            `yaml:"connector"`
+	Connectors       map[string]*Connector `yaml:"connectors"`
+	Callback         *Callback             `yaml:"callback"`
+	RequestSignature *RequestSignature     `yaml:"requestSignature"`
 }
 
 type Server struct {
@@ -90,4 +91,8 @@ type Callback struct {
 	DepositURL     string `yaml:"depositUrl"`
 	TransferOutURL string `yaml:"transferOutUrl"`
 	TimeoutSeconds int    `yaml:"timeoutSeconds"`
+}
+
+type RequestSignature struct {
+	Enabled bool `yaml:"enabled"`
 }

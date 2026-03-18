@@ -47,3 +47,5 @@ callback:
   depositUrl: ""
   transferOutUrl: ""
   timeoutSeconds: 10
+requestSignature:
+  enabled: true

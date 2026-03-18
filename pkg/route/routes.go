@@ -1,6 +1,7 @@
 package route
 
 import (
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/config"
 	"github.com/guyuxiang/projectc-custodial-wallet/pkg/middleware"
 	"os"
 
@@ -41,7 +42,9 @@ func InstallRoutes(r *gin.Engine) {
 	})
 
 	rootGroup := r.Group("/api/v1")
-	rootGroup.Use(middleware.RequestSignatureMiddleware())
+	if config.GetBool(config.FLAG_KEY_REQ_SIG_ENABLE) {
+		rootGroup.Use(middleware.RequestSignatureMiddleware())
+	}
 
 	adminGroup := r.Group("/api/v1/admin")
 	adminGroup.Use(middleware.BasicAuthMiddleware())
@@ -61,6 +64,7 @@ func InstallRoutes(r *gin.Engine) {
 		rootGroup.POST("/wallet/transfer/out", walletController.TransferOut)
 		rootGroup.POST("/wallet/transaction/query", walletController.QueryTransaction)
 		rootGroup.POST("/wallet/transaction/history/query", walletController.QueryHistory)
+
 		innerGroup.POST("/wallet/create", walletController.CreateWallet)
 		innerGroup.POST("/wallet/callback/tx", walletController.ReceiveTxCallback)
 		innerGroup.POST("/wallet/callback/rollback", walletController.ReceiveRollbackCallback)

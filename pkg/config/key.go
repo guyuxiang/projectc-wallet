@@ -30,4 +30,5 @@ const (
 	FLAG_KEY_CB_OUT         = "callback.transferOutUrl"
 	FLAG_KEY_CB_TIMEOUT     = "callback.timeoutSeconds"
 	FLAG_KEY_SOL_RPC        = "connectors.solana.rpcEndpoint"
+	FLAG_KEY_REQ_SIG_ENABLE = "requestSignature.enabled"
 )
