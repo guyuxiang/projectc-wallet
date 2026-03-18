@@ -190,6 +190,13 @@ func (s *walletService) nativeTokenSymbol(network string) string {
 	return strings.ToUpper(normalizedNetwork(network))
 }
 
+func (s *walletService) connectorNetworkCode(network string) string {
+	if connector := s.connectorConfig(network); connector != nil && strings.TrimSpace(connector.NetworkCode) != "" {
+		return normalizedNetwork(connector.NetworkCode)
+	}
+	return normalizedNetwork(network)
+}
+
 func normalizedNetwork(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))
 }

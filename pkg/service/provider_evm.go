@@ -672,7 +672,8 @@ func (p *evmProvider) HandleRollbackCallback(ctx context.Context, req models.Con
 }
 
 func (p *evmProvider) subscribeAddress(ctx context.Context, address string) error {
-	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/evm/address-subscribe", map[string]string{
+	networkCode := p.svc.connectorNetworkCode(p.network)
+	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/"+networkCode+"/address-subscribe", map[string]string{
 		"address": address,
 	}, nil)
 }
@@ -682,7 +683,7 @@ func (p *evmProvider) listConnectorTokens(ctx context.Context) ([]evmToken, erro
 		Tokens []evmToken `json:"tokens"`
 	}
 	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-list", map[string]string{
-		"networkCode": p.network,
+		"networkCode": p.svc.connectorNetworkCode(p.network),
 	}, &resp); err != nil {
 		return nil, wrapSystemError(err)
 	}

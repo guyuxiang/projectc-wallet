@@ -460,7 +460,8 @@ func (p *solanaProvider) HandleRollbackCallback(ctx context.Context, req models.
 }
 
 func (p *solanaProvider) subscribeAddress(ctx context.Context, address string) error {
-	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/solana/address-subscribe", map[string]string{
+	networkCode := p.svc.connectorNetworkCode(p.network)
+	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/"+networkCode+"/address-subscribe", map[string]string{
 		"address": address,
 	}, nil)
 }
@@ -470,7 +471,7 @@ func (p *solanaProvider) listConnectorTokens(ctx context.Context) ([]connectorTo
 		Tokens []connectorToken `json:"tokens"`
 	}
 	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/solana/common/token-list", map[string]string{
-		"networkCode": p.network,
+		"networkCode": p.svc.connectorNetworkCode(p.network),
 	}, &resp); err != nil {
 		return nil, wrapSystemError(err)
 	}
