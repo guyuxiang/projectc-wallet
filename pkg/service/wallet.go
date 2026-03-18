@@ -678,10 +678,3 @@ func defaultIndex(v string) string {
 	}
 	return strings.TrimSpace(v)
 }
-
-func (s *walletService) computeUnitPrice() uint64 {
-	if s.cfg != nil && s.cfg.Solana != nil {
-		return s.cfg.Solana.ComputeUnitPrice
-	}
-	return 0
-}

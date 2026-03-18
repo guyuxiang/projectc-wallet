@@ -664,9 +664,7 @@ func (p *evmProvider) listConnectorTokens(ctx context.Context) ([]evmToken, erro
 	var resp struct {
 		Tokens []evmToken `json:"tokens"`
 	}
-	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-list", map[string]string{
-		"networkCode": p.svc.connectorNetworkCode(p.network),
-	}, &resp); err != nil {
+	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-list", map[string]string{}, &resp); err != nil {
 		return nil, wrapSystemError(err)
 	}
 	return resp.Tokens, nil

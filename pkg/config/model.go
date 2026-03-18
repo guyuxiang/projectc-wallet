@@ -12,7 +12,6 @@ type Config struct {
 	Connector  *Connector            `yaml:"connector"`
 	Connectors map[string]*Connector `yaml:"connectors"`
 	Callback   *Callback             `yaml:"callback"`
-	Solana     *Solana               `yaml:"solana"`
 }
 
 type Server struct {
@@ -91,9 +90,4 @@ type Callback struct {
 	DepositURL     string `yaml:"depositUrl"`
 	TransferOutURL string `yaml:"transferOutUrl"`
 	TimeoutSeconds int    `yaml:"timeoutSeconds"`
-}
-
-type Solana struct {
-	RPCEndpoint      string `yaml:"rpcEndpoint"`
-	ComputeUnitPrice uint64 `yaml:"computeUnitPrice"`
 }

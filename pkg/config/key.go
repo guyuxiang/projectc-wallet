@@ -29,6 +29,5 @@ const (
 	FLAG_KEY_CB_DEPOSIT     = "callback.depositUrl"
 	FLAG_KEY_CB_OUT         = "callback.transferOutUrl"
 	FLAG_KEY_CB_TIMEOUT     = "callback.timeoutSeconds"
-	FLAG_KEY_SOL_RPC        = "solana.rpcEndpoint"
-	FLAG_KEY_SOL_CU_PRICE   = "solana.computeUnitPrice"
+	FLAG_KEY_SOL_RPC        = "connectors.solana.rpcEndpoint"
 )

@@ -23,16 +23,27 @@ kms:
   password: "test"
 connectors:
   solana:
+    networkCode: "solana"
+    driver: "solana"
+    nativeTokenSymbol: "SOL"
     baseUrl: "http://unblock-solana-connector"
     username: "test"
     password: "test"
-    driver: "solana"
-    networkCode: "solana"
-    nativeTokenSymbol: "SOL"
+    rpcEndpoint: "https://devnet.helius-rpc.com/?api-key=7c8a6828-2b0b-456b-a1fc-f08073e8304a"
+  ethereum:
+    networkCode: "sepolia"
+    driver: "evm"
+    nativeTokenSymbol: "ETH"
+    baseUrl: "http://unblock-eth-connector"
+    username: "test"
+    password: "test"
+    rpcEndpoint: "https://sepolia.gateway.tenderly.co/2xRV8vQTDZE3KmbMjo4jCm"
+    chainId: 11155111
+    bundlerRpcEndpoint: ""
+    entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"
+    enableEip7702: false
+    eip7702Delegator: "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B"
 callback:
   depositUrl: ""
   transferOutUrl: ""
   timeoutSeconds: 10
-solana:
-  rpcEndpoint: "https://devnet.helius-rpc.com/?api-key=7c8a6828-2b0b-456b-a1fc-f08073e8304a"
-  computeUnitPrice: 0

@@ -235,11 +235,12 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 	if !wallet.TransferEnabled {
 		return nil, newAppError(models.CodePermissionDenied, "wallet transfer is disabled")
 	}
-	if p.svc.cfg == nil || p.svc.cfg.Solana == nil || p.svc.cfg.Solana.RPCEndpoint == "" {
+	connector := p.svc.connectorConfig(p.network)
+	if connector == nil || strings.TrimSpace(connector.RPCEndpoint) == "" {
 		return nil, newAppError(models.CodeSystemBusy, "solana rpc endpoint is not configured")
 	}
 
-	blockhash, err := fetchLatestBlockhash(ctx, p.svc.httpClient, p.svc.cfg.Solana.RPCEndpoint)
+	blockhash, err := fetchLatestBlockhash(ctx, p.svc.httpClient, connector.RPCEndpoint)
 	if err != nil {
 		return nil, wrapSystemError(err)
 	}
@@ -264,7 +265,7 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
 		}
 		lamports, _ := amountToLamports(req.Amount)
-		unsignedTx, err := buildUnsignedNativeTransferTx(wallet.Address, req.ToAddress, blockhash, lamports, p.svc.computeUnitPrice())
+		unsignedTx, err := buildUnsignedNativeTransferTx(wallet.Address, req.ToAddress, blockhash, lamports, 0)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -294,14 +295,14 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if tokenBalanceResp.Value < requestAmountValue {
 			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
 		}
-		sourceAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, p.svc.cfg.Solana.RPCEndpoint, wallet.Address, tokenMeta.MintAddress)
+		sourceAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, wallet.Address, tokenMeta.MintAddress)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
 		if len(sourceAccounts) == 0 {
 			return nil, newAppError(models.CodeInsufficient, "source token account not found")
 		}
-		destAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, p.svc.cfg.Solana.RPCEndpoint, req.ToAddress, tokenMeta.MintAddress)
+		destAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, req.ToAddress, tokenMeta.MintAddress)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -320,7 +321,7 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if err != nil {
 			return nil, newAppError(models.CodeParamError, err.Error())
 		}
-		unsignedTx, err := buildUnsignedSPLTransferTx(wallet.Address, req.ToAddress, tokenMeta.MintAddress, sourceTokenAccount, destinationTokenAccount, blockhash, baseUnits, tokenMeta.Decimals, p.svc.computeUnitPrice(), createATA)
+		unsignedTx, err := buildUnsignedSPLTransferTx(wallet.Address, req.ToAddress, tokenMeta.MintAddress, sourceTokenAccount, destinationTokenAccount, blockhash, baseUnits, tokenMeta.Decimals, 0, createATA)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -460,8 +461,7 @@ func (p *solanaProvider) HandleRollbackCallback(ctx context.Context, req models.
 }
 
 func (p *solanaProvider) subscribeAddress(ctx context.Context, address string) error {
-	networkCode := p.svc.connectorNetworkCode(p.network)
-	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/"+networkCode+"/address-subscribe", map[string]string{
+	return p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data-subscribe/solana/address-subscribe", map[string]string{
 		"address": address,
 	}, nil)
 }
@@ -470,9 +470,7 @@ func (p *solanaProvider) listConnectorTokens(ctx context.Context) ([]connectorTo
 	var resp struct {
 		Tokens []connectorToken `json:"tokens"`
 	}
-	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/solana/common/token-list", map[string]string{
-		"networkCode": p.svc.connectorNetworkCode(p.network),
-	}, &resp); err != nil {
+	if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/solana/common/token-list", map[string]string{}, &resp); err != nil {
 		return nil, wrapSystemError(err)
 	}
 	return resp.Tokens, nil

@@ -121,9 +121,4 @@ var flagsOpts = []flagOpt{
 		optDefaultValue: "",
 		optUsage:        "solana rpc endpoint",
 	},
-	{
-		optName:         FLAG_KEY_SOL_CU_PRICE,
-		optDefaultValue: 0,
-		optUsage:        "solana compute unit price",
-	},
 }
