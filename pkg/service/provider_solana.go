@@ -176,12 +176,12 @@ func (p *solanaProvider) QueryWalletInfo(ctx context.Context, wallet *models.Wal
 		}
 		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/solana/common/token-balance", map[string]string{
 			"address":   wallet.Address,
-			"tokenCode": token.Code,
+			"tokenCode": token.TokenCode,
 		}, &tokenResp); err != nil {
 			return nil, wrapSystemError(err)
 		}
 		items = append(items, models.WalletTokenBalance{
-			TokenSymbol: token.Code,
+			TokenSymbol: token.TokenCode,
 			Balance:     formatFloat(tokenResp.Value),
 		})
 	}
@@ -208,8 +208,8 @@ func (p *solanaProvider) QueryTransferOutAssets(ctx context.Context, wallet *mod
 	for _, token := range tokens {
 		assets = append(assets, models.TransferableAsset{
 			Network:      wallet.Network,
-			TokenAddress: token.MintAddress,
-			TokenSymbol:  token.Code,
+			TokenAddress: token.TokenAddress,
+			TokenSymbol:  token.TokenCode,
 		})
 	}
 	return &models.TransferOutQueryResponse{
@@ -278,13 +278,13 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if err != nil {
 			return nil, err
 		}
-		tokenAddress = tokenMeta.MintAddress
+		tokenAddress = tokenMeta.TokenAddress
 		var tokenBalanceResp struct {
 			Value float64 `json:"value"`
 		}
 		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/solana/common/token-balance", map[string]string{
 			"address":   wallet.Address,
-			"tokenCode": tokenMeta.Code,
+			"tokenCode": tokenMeta.TokenCode,
 		}, &tokenBalanceResp); err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -295,14 +295,14 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if tokenBalanceResp.Value < requestAmountValue {
 			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
 		}
-		sourceAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, wallet.Address, tokenMeta.MintAddress)
+		sourceAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, wallet.Address, tokenMeta.TokenAddress)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
 		if len(sourceAccounts) == 0 {
 			return nil, newAppError(models.CodeInsufficient, "source token account not found")
 		}
-		destAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, req.ToAddress, tokenMeta.MintAddress)
+		destAccounts, err := fetchTokenAccountsByOwner(ctx, p.svc.httpClient, connector.RPCEndpoint, req.ToAddress, tokenMeta.TokenAddress)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -312,7 +312,7 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if len(destAccounts) > 0 {
 			destinationTokenAccount = destAccounts[0].Pubkey
 		} else {
-			destinationTokenAccount, createATA, err = deriveAssociatedTokenAddress(req.ToAddress, tokenMeta.MintAddress)
+			destinationTokenAccount, createATA, err = deriveAssociatedTokenAddress(req.ToAddress, tokenMeta.TokenAddress)
 			if err != nil {
 				return nil, newAppError(models.CodeAddressInvalid, "invalid destination address")
 			}
@@ -321,7 +321,7 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if err != nil {
 			return nil, newAppError(models.CodeParamError, err.Error())
 		}
-		unsignedTx, err := buildUnsignedSPLTransferTx(wallet.Address, req.ToAddress, tokenMeta.MintAddress, sourceTokenAccount, destinationTokenAccount, blockhash, baseUnits, tokenMeta.Decimals, 0, createATA)
+		unsignedTx, err := buildUnsignedSPLTransferTx(wallet.Address, req.ToAddress, tokenMeta.TokenAddress, sourceTokenAccount, destinationTokenAccount, blockhash, baseUnits, tokenMeta.Decimals, 0, createATA)
 		if err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -329,7 +329,7 @@ func (p *solanaProvider) TransferOut(ctx context.Context, wallet *models.WalletE
 		if err != nil {
 			return nil, err
 		}
-		tokenSymbol = tokenMeta.Code
+		tokenSymbol = tokenMeta.TokenCode
 	}
 
 	var sendResp struct {
@@ -492,7 +492,7 @@ func (p *solanaProvider) findConnectorTokenByMint(ctx context.Context, mintAddre
 		return nil, err
 	}
 	for _, token := range tokens {
-		if strings.EqualFold(token.MintAddress, mintAddress) {
+		if strings.EqualFold(token.TokenAddress, mintAddress) {
 			tokenCopy := token
 			return &tokenCopy, nil
 		}
@@ -506,7 +506,7 @@ func (p *solanaProvider) findConnectorTokenByCode(ctx context.Context, tokenCode
 		return nil, err
 	}
 	for _, token := range tokens {
-		if strings.EqualFold(token.Code, tokenCode) {
+		if strings.EqualFold(token.TokenCode, tokenCode) {
 			tokenCopy := token
 			return &tokenCopy, nil
 		}
@@ -557,7 +557,7 @@ func (p *solanaProvider) handleIncomingToken(ctx context.Context, req models.Con
 		}
 		amount := formatEventAmount(event.Data["amount"])
 		fromAddress, _ := event.Data["from"].(string)
-		if err := p.upsertIncomingTransaction(ctx, wallet, req.Tx.Code, token.MintAddress, token.Code, amount, fromAddress, toAddress, req.Tx.Fee, req.Tx.Timestamp, models.StatusSuccess); err != nil {
+		if err := p.upsertIncomingTransaction(ctx, wallet, req.Tx.Code, token.TokenAddress, token.TokenCode, amount, fromAddress, toAddress, req.Tx.Fee, req.Tx.Timestamp, models.StatusSuccess); err != nil {
 			return err
 		}
 	}

@@ -20,11 +20,10 @@ type evmProvider struct {
 }
 
 type evmToken struct {
-	Code            string `json:"code"`
-	NetworkCode     string `json:"networkCode"`
-	ContractAddress string `json:"contractAddress"`
-	MintAddress     string `json:"mintAddress"`
-	Decimals        uint8  `json:"decimals"`
+	TokenCode    string `json:"tokenCode"`
+	NetworkCode  string `json:"networkCode"`
+	TokenAddress string `json:"tokenAddress"`
+	Decimals     uint8  `json:"decimals"`
 }
 
 func (p *evmProvider) NetworkCode() string {
@@ -172,12 +171,12 @@ func (p *evmProvider) QueryWalletInfo(ctx context.Context, wallet *models.Wallet
 		}
 		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-balance", map[string]string{
 			"address":   wallet.Address,
-			"tokenCode": token.Code,
+			"tokenCode": token.TokenCode,
 		}, &tokenResp); err != nil {
 			return nil, wrapSystemError(err)
 		}
 		items = append(items, models.WalletTokenBalance{
-			TokenSymbol: token.Code,
+			TokenSymbol: token.TokenCode,
 			Balance:     formatFloat(tokenResp.Value),
 		})
 	}
@@ -204,8 +203,8 @@ func (p *evmProvider) QueryTransferOutAssets(ctx context.Context, wallet *models
 	for _, token := range tokens {
 		assets = append(assets, models.TransferableAsset{
 			Network:      wallet.Network,
-			TokenAddress: token.Address(),
-			TokenSymbol:  token.Code,
+			TokenAddress: token.TokenAddress,
+			TokenSymbol:  token.TokenCode,
 		})
 	}
 	return &models.TransferOutQueryResponse{
@@ -277,13 +276,13 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 		if err != nil {
 			return nil, err
 		}
-		tokenAddress = tokenMeta.Address()
+		tokenAddress = tokenMeta.TokenAddress
 		var tokenBalanceResp struct {
 			Value float64 `json:"value"`
 		}
 		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-balance", map[string]string{
 			"address":   wallet.Address,
-			"tokenCode": tokenMeta.Code,
+			"tokenCode": tokenMeta.TokenCode,
 		}, &tokenBalanceResp); err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -295,11 +294,11 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 			return nil, newAppError(models.CodeInsufficient, "insufficient balance")
 		}
 
-		gasLimit, err := p.estimateERC20TransferGas(ctx, rpcClient, wallet.Address, tokenMeta.Address(), req.ToAddress, gasPrice, requestAmount, tokenMeta.Decimals)
+		gasLimit, err := p.estimateERC20TransferGas(ctx, rpcClient, wallet.Address, tokenMeta.TokenAddress, req.ToAddress, gasPrice, requestAmount, tokenMeta.Decimals)
 		if err != nil {
 			return nil, err
 		}
-		unsignedTx, err := buildUnsignedERC20TransferTx(tokenMeta.Address(), req.ToAddress, chainID, nonce, gasPrice, gasLimit, requestAmount, tokenMeta.Decimals)
+		unsignedTx, err := buildUnsignedERC20TransferTx(tokenMeta.TokenAddress, req.ToAddress, chainID, nonce, gasPrice, gasLimit, requestAmount, tokenMeta.Decimals)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +306,7 @@ func (p *evmProvider) TransferOut(ctx context.Context, wallet *models.WalletEnti
 		if err != nil {
 			return nil, err
 		}
-		tokenSymbol = tokenMeta.Code
+		tokenSymbol = tokenMeta.TokenCode
 	}
 
 	var sendResp struct {
@@ -404,13 +403,13 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 		if err != nil {
 			return nil, err
 		}
-		tokenAddress = tokenMeta.Address()
+		tokenAddress = tokenMeta.TokenAddress
 		var tokenBalanceResp struct {
 			Value float64 `json:"value"`
 		}
 		if err := p.svc.connectorPost(ctx, p.network, "/api/v1/inner/chain-data/evm/common/token-balance", map[string]string{
 			"address":   wallet.Address,
-			"tokenCode": tokenMeta.Code,
+			"tokenCode": tokenMeta.TokenCode,
 		}, &tokenBalanceResp); err != nil {
 			return nil, wrapSystemError(err)
 		}
@@ -429,9 +428,9 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 		if err != nil {
 			return nil, newAppError(models.CodeParamError, err.Error())
 		}
-		tokenSymbol = tokenMeta.Code
+		tokenSymbol = tokenMeta.TokenCode
 		callGasLimit = p.userOperationCallGasLimit(false)
-		callTarget = tokenMeta.Address()
+		callTarget = tokenMeta.TokenAddress
 	}
 
 	userOpCallData, err := buildEIP7702ExecuteCallData(callTarget, callValue, callData)
@@ -686,7 +685,7 @@ func (p *evmProvider) findConnectorTokenByAddress(ctx context.Context, tokenAddr
 		return nil, err
 	}
 	for _, token := range tokens {
-		if strings.EqualFold(token.Address(), tokenAddress) {
+		if strings.EqualFold(token.TokenAddress, tokenAddress) {
 			tokenCopy := token
 			return &tokenCopy, nil
 		}
@@ -741,8 +740,8 @@ func (p *evmProvider) handleIncomingToken(ctx context.Context, req models.Connec
 			if err != nil {
 				return err
 			}
-			tokenAddress = tokenMeta.Address()
-			tokenSymbol = tokenMeta.Code
+			tokenAddress = tokenMeta.TokenAddress
+			tokenSymbol = tokenMeta.TokenCode
 		}
 		if tokenAddress == "" {
 			return newAppError(models.CodeTokenUnsupported, "token not supported")
@@ -752,7 +751,7 @@ func (p *evmProvider) handleIncomingToken(ctx context.Context, req models.Connec
 			if err != nil {
 				return err
 			}
-			tokenSymbol = tokenMeta.Code
+			tokenSymbol = tokenMeta.TokenCode
 		}
 
 		amount := formatEventAmount(event.Data["amount"])
@@ -844,13 +843,6 @@ func (p *evmProvider) isEVMAddressType(chainType string) bool {
 
 func validateEVMAddress(address string) bool {
 	return evmAddressPattern.MatchString(strings.TrimSpace(address))
-}
-
-func (t evmToken) Address() string {
-	if strings.TrimSpace(t.ContractAddress) != "" {
-		return strings.TrimSpace(t.ContractAddress)
-	}
-	return strings.TrimSpace(t.MintAddress)
 }
 
 func firstNonEmpty(values ...string) string {
