@@ -323,6 +323,58 @@ func buildUserOperationTypedData(chainID uint64, entryPoint string, userOp evmUs
 	return string(raw), nil
 }
 
+func buildUserOperationHash(chainID uint64, entryPoint string, userOp evmUserOperation) (string, error) {
+	senderWord, err := abiAddressWord(userOp.Sender)
+	if err != nil {
+		return "", err
+	}
+	entryPointWord, err := abiAddressWord(entryPoint)
+	if err != nil {
+		return "", err
+	}
+	nonce, err := parseHexBig(userOp.Nonce)
+	if err != nil {
+		return "", err
+	}
+	preVerificationGas, err := parseHexBig(userOp.PreVerificationGas)
+	if err != nil {
+		return "", err
+	}
+
+	initCodeHash, err := keccak256Hex(buildPackedInitCode(userOp.Factory, userOp.FactoryData))
+	if err != nil {
+		return "", err
+	}
+	callDataHash, err := keccak256Hex(userOp.CallData)
+	if err != nil {
+		return "", err
+	}
+	paymasterAndDataHash, err := keccak256Hex(buildPaymasterAndData(userOp))
+	if err != nil {
+		return "", err
+	}
+
+	encodedUserOp := senderWord +
+		abiUint256Word(nonce) +
+		initCodeHash +
+		callDataHash +
+		strings.TrimPrefix(packTwoUint128Hex(userOp.VerificationGasLimit, userOp.CallGasLimit), "0x") +
+		abiUint256Word(preVerificationGas) +
+		strings.TrimPrefix(packTwoUint128Hex(userOp.MaxPriorityFeePerGas, userOp.MaxFeePerGas), "0x") +
+		paymasterAndDataHash
+
+	userOpHash, err := keccak256Hex("0x" + encodedUserOp)
+	if err != nil {
+		return "", err
+	}
+
+	finalHash, err := keccak256Hex("0x" + userOpHash + entryPointWord + abiUint256Word(new(big.Int).SetUint64(chainID)))
+	if err != nil {
+		return "", err
+	}
+	return "0x" + finalHash, nil
+}
+
 func buildInitCode(factory string, factoryData string) string {
 	factory = strings.TrimSpace(factory)
 	factoryData = strings.TrimSpace(factoryData)
@@ -333,6 +385,19 @@ func buildInitCode(factory string, factoryData string) string {
 		return factory
 	}
 	return factory + strings.TrimPrefix(factoryData, "0x")
+}
+
+func buildPackedInitCode(factory string, factoryData string) string {
+	factory = strings.TrimSpace(factory)
+	factoryData = strings.TrimSpace(factoryData)
+	if factory == "" {
+		return "0x"
+	}
+	paddedFactory := rightPadHex(factory, 40)
+	if factoryData == "" || factoryData == "0x" {
+		return "0x" + paddedFactory
+	}
+	return "0x" + paddedFactory + strings.TrimPrefix(factoryData, "0x")
 }
 
 func buildPaymasterAndData(userOp evmUserOperation) string {
@@ -434,6 +499,17 @@ func trimHexPrefixes(parts []string) []string {
 		out = append(out, strings.TrimPrefix(strings.TrimSpace(part), "0x"))
 	}
 	return out
+}
+
+func keccak256Hex(v string) (string, error) {
+	raw := normalizeHexBytes(v)
+	data, err := hex.DecodeString(raw)
+	if err != nil {
+		return "", err
+	}
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(data)
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func parseSignatureRSV(signature string) (string, string, uint64, error) {

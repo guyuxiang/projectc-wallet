@@ -370,6 +370,12 @@ type SignTypedDataRequest struct {
 	TypedData  string `json:"typed_data,omitempty"`
 }
 
+type SignMessageRequest struct {
+	KeystoreId string `json:"keystore_id,omitempty"`
+	Password   string `json:"password,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
 type SignDataRes struct {
 	Hash      string `json:"hash,omitempty"`
 	Signature string `json:"signature,omitempty"`
@@ -455,6 +461,26 @@ func (s *walletService) signEIP712TypedData(ctx context.Context, wallet *models.
 	}
 	var data SignDataRes
 	path := fmt.Sprintf("/kms/mnemonic/sign-typed-data/evm/%s/%s/%s", defaultIndex(wallet.AccountIndex), defaultIndex(wallet.ChangeIndex), defaultIndex(wallet.AddressIndex))
+	if err := s.kmsPost(ctx, path, body, &data); err != nil {
+		return nil, wrapSystemError(err)
+	}
+	return &data, nil
+}
+
+func (s *walletService) signEVMMessage(ctx context.Context, wallet *models.WalletEntity, message string) (*SignDataRes, error) {
+	if strings.TrimSpace(message) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "empty message")
+	}
+	if strings.ToLower(wallet.KMSKeyType) != "mnemonic" {
+		return nil, newAppError(models.CodeSystemBusy, "message signing requires mnemonic kms key type")
+	}
+	body := SignMessageRequest{
+		KeystoreId: wallet.KMSKeystoreID,
+		Password:   wallet.KMSPassword,
+		Message:    message,
+	}
+	var data SignDataRes
+	path := fmt.Sprintf("/kms/mnemonic/sign-message/evm/%s/%s/%s", defaultIndex(wallet.AccountIndex), defaultIndex(wallet.ChangeIndex), defaultIndex(wallet.AddressIndex))
 	if err := s.kmsPost(ctx, path, body, &data); err != nil {
 		return nil, wrapSystemError(err)
 	}

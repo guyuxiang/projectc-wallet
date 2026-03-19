@@ -507,11 +507,11 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 	if strings.TrimSpace(gasEstimate.PaymasterPostOpGasLimit) != "" {
 		userOp.PaymasterPostOpGasLimit = gasEstimate.PaymasterPostOpGasLimit
 	}
-	typedData, err := buildUserOperationTypedData(chainID, entryPoint, userOp)
+	userOpHash, err := buildUserOperationHash(chainID, entryPoint, userOp)
 	if err != nil {
 		return nil, wrapSystemError(err)
 	}
-	userOpSignRes, err := p.svc.signEIP712TypedData(ctx, wallet, typedData)
+	userOpSignRes, err := p.svc.signEVMMessage(ctx, wallet, userOpHash)
 	if err != nil {
 		return nil, err
 	}
