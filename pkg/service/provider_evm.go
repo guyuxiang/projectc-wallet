@@ -507,7 +507,7 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 	if strings.TrimSpace(gasEstimate.PaymasterPostOpGasLimit) != "" {
 		userOp.PaymasterPostOpGasLimit = gasEstimate.PaymasterPostOpGasLimit
 	}
-	userOpHash, err := buildUserOperationHash(chainID, entryPoint, userOp)
+	userOpHash, err := rpcClient.getUserOperationHash(ctx, entryPoint, userOp, stateOverride)
 	if err != nil {
 		return nil, wrapSystemError(err)
 	}

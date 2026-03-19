@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/guyuxiang/projectc-custodial-wallet/pkg/log"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -89,6 +91,7 @@ func (c *evmRPCClient) call(ctx context.Context, method string, params []interfa
 	if err != nil {
 		return err
 	}
+	log.Infof("evm rpc request endpoint=%s method=%s payload=%s", c.endpoint, method, truncateLogString(string(body), 2048))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -99,16 +102,21 @@ func (c *evmRPCClient) call(ctx context.Context, method string, params []interfa
 		return err
 	}
 	defer resp.Body.Close()
-
-	var result struct {
-		Error  interface{}     `json:"error"`
-		Result json.RawMessage `json:"result"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return err
 	}
-	if result.Error != nil {
-		return fmt.Errorf("rpc %s failed", method)
+	log.Infof("evm rpc response endpoint=%s method=%s status=%d body=%s", c.endpoint, method, resp.StatusCode, truncateLogString(string(raw), 2048))
+
+	var result struct {
+		Error  json.RawMessage `json:"error"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return err
+	}
+	if len(result.Error) > 0 && string(result.Error) != "null" {
+		return fmt.Errorf("rpc %s failed: %s", method, strings.TrimSpace(string(result.Error)))
 	}
 	if out == nil {
 		return nil
@@ -155,6 +163,24 @@ func (c *evmRPCClient) callContract(ctx context.Context, to string, data string)
 	return strings.TrimSpace(result), nil
 }
 
+func (c *evmRPCClient) callContractWithStateOverride(ctx context.Context, to string, data string, stateOverride evmStateOverride) (string, error) {
+	var result string
+	params := []interface{}{
+		map[string]string{
+			"to":   strings.TrimSpace(to),
+			"data": strings.TrimSpace(data),
+		},
+		"latest",
+	}
+	if len(stateOverride) > 0 {
+		params = append(params, stateOverride)
+	}
+	if err := c.call(ctx, "eth_call", params, &result); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result), nil
+}
+
 func (c *evmRPCClient) getUserOperationNonce(ctx context.Context, entryPoint string, sender string) (uint64, error) {
 	callData, err := buildGetNonceCallData(sender, 0)
 	if err != nil {
@@ -165,6 +191,26 @@ func (c *evmRPCClient) getUserOperationNonce(ctx context.Context, entryPoint str
 		return 0, err
 	}
 	return parseHexUint64(result)
+}
+
+func (c *evmRPCClient) getUserOperationHash(ctx context.Context, entryPoint string, userOp evmUserOperation, stateOverride evmStateOverride) (string, error) {
+	callData, err := buildGetUserOpHashCallData(userOp)
+	if err != nil {
+		return "", err
+	}
+	overrideJSON, _ := json.Marshal(stateOverride)
+	log.Infof("evm getUserOpHash request entryPoint=%s callData=%s stateOverride=%s", entryPoint, truncateLogString(callData, 2048), truncateLogString(string(overrideJSON), 1024))
+	result, err := c.callContractWithStateOverride(ctx, entryPoint, callData, stateOverride)
+	if err != nil {
+		log.Infof("evm getUserOpHash failed entryPoint=%s err=%v", entryPoint, err)
+		return "", err
+	}
+	log.Infof("evm getUserOpHash response entryPoint=%s hash=%s", entryPoint, result)
+	raw := normalizeHexBytes(result)
+	if len(raw) != 64 {
+		return "", fmt.Errorf("invalid getUserOpHash result: %s", result)
+	}
+	return "0x" + raw, nil
 }
 
 func (c *evmRPCClient) getCode(ctx context.Context, address string) (string, error) {
@@ -375,6 +421,53 @@ func buildUserOperationHash(chainID uint64, entryPoint string, userOp evmUserOpe
 	return "0x" + finalHash, nil
 }
 
+func buildGetUserOpHashCallData(userOp evmUserOperation) (string, error) {
+	senderWord, err := abiAddressWord(userOp.Sender)
+	if err != nil {
+		return "", err
+	}
+	nonce, err := parseHexBig(userOp.Nonce)
+	if err != nil {
+		return "", err
+	}
+	preVerificationGas, err := parseHexBig(userOp.PreVerificationGas)
+	if err != nil {
+		return "", err
+	}
+
+	initCodeEncoded := abiEncodeBytes(buildPackedInitCode(userOp.Factory, userOp.FactoryData))
+	callDataEncoded := abiEncodeBytes(userOp.CallData)
+	paymasterAndDataEncoded := abiEncodeBytes(buildPaymasterAndData(userOp))
+	signatureEncoded := abiEncodeBytes(userOp.Signature)
+
+	head := make([]string, 0, 9)
+	tail := make([]string, 0, 4)
+	offset := 32 * 9
+
+	head = append(head, senderWord)
+	head = append(head, abiUint256Word(nonce))
+	head = append(head, abiUint256Word(big.NewInt(int64(offset))))
+	tail = append(tail, initCodeEncoded)
+	offset += len(initCodeEncoded) / 2
+
+	head = append(head, abiUint256Word(big.NewInt(int64(offset))))
+	tail = append(tail, callDataEncoded)
+	offset += len(callDataEncoded) / 2
+
+	head = append(head, strings.TrimPrefix(packTwoUint128Hex(userOp.VerificationGasLimit, userOp.CallGasLimit), "0x"))
+	head = append(head, abiUint256Word(preVerificationGas))
+	head = append(head, strings.TrimPrefix(packTwoUint128Hex(userOp.MaxPriorityFeePerGas, userOp.MaxFeePerGas), "0x"))
+
+	head = append(head, abiUint256Word(big.NewInt(int64(offset))))
+	tail = append(tail, paymasterAndDataEncoded)
+	offset += len(paymasterAndDataEncoded) / 2
+
+	head = append(head, abiUint256Word(big.NewInt(int64(offset))))
+	tail = append(tail, signatureEncoded)
+
+	return "0x" + methodSelector("getUserOpHash((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes))") + strings.Join(head, "") + strings.Join(tail, ""), nil
+}
+
 func buildInitCode(factory string, factoryData string) string {
 	factory = strings.TrimSpace(factory)
 	factoryData = strings.TrimSpace(factoryData)
@@ -491,6 +584,13 @@ func isEIP7702UserOperation(userOp evmUserOperation) bool {
 	}
 	_, ok := userOp.EIP7702Auth["address"].(string)
 	return ok
+}
+
+func abiEncodeBytes(v string) string {
+	raw := normalizeHexBytes(v)
+	lengthWord := abiUint256Word(big.NewInt(int64(len(raw) / 2)))
+	paddedRaw := rightPadHex(raw, ((len(raw)+63)/64)*64)
+	return lengthWord + paddedRaw
 }
 
 func normalizeHexBytes(v string) string {
