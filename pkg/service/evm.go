@@ -465,7 +465,7 @@ func buildGetUserOpHashCallData(userOp evmUserOperation) (string, error) {
 	head = append(head, abiUint256Word(big.NewInt(int64(offset))))
 	tail = append(tail, signatureEncoded)
 
-	return "0x" + methodSelector("getUserOpHash((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes))") + strings.Join(head, "") + strings.Join(tail, ""), nil
+	return "0x" + methodSelector("getUserOpHash((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes))") + abiUint256Word(big.NewInt(32)) + strings.Join(head, "") + strings.Join(tail, ""), nil
 }
 
 func buildInitCode(factory string, factoryData string) string {
