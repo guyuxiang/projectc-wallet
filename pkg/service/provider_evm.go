@@ -462,28 +462,6 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 	if alreadyDelegated && !strings.EqualFold(existingDelegator, delegator) {
 		return nil, newAppError(models.CodeSystemBusy, "account is already delegated to another eip7702 contract")
 	}
-	stateOverride, err := p.userOperationEstimateStateOverride(wallet.Address, delegator, alreadyDelegated)
-	if err != nil {
-		return nil, err
-	}
-	gasEstimate, err := bundlerClient.estimateUserOperationGas(ctx, userOp, entryPoint, stateOverride)
-	if err != nil {
-		return nil, wrapSystemError(err)
-	}
-	if strings.TrimSpace(gasEstimate.CallGasLimit) != "" {
-		userOp.CallGasLimit = gasEstimate.CallGasLimit
-	}
-	if strings.TrimSpace(gasEstimate.VerificationGasLimit) == "" || strings.TrimSpace(gasEstimate.PreVerificationGas) == "" {
-		return nil, newAppError(models.CodeSystemBusy, "bundler estimateUserOperationGas returned incomplete gas fields")
-	}
-	userOp.VerificationGasLimit = gasEstimate.VerificationGasLimit
-	userOp.PreVerificationGas = gasEstimate.PreVerificationGas
-	if strings.TrimSpace(gasEstimate.PaymasterVerificationGasLimit) != "" {
-		userOp.PaymasterVerificationGasLimit = gasEstimate.PaymasterVerificationGasLimit
-	}
-	if strings.TrimSpace(gasEstimate.PaymasterPostOpGasLimit) != "" {
-		userOp.PaymasterPostOpGasLimit = gasEstimate.PaymasterPostOpGasLimit
-	}
 
 	var authMap map[string]interface{}
 	if !alreadyDelegated {
@@ -505,9 +483,29 @@ func (p *evmProvider) transferOutWithEIP7702(ctx context.Context, wallet *models
 			"hash":      authSignRes.Hash,
 			"signature": authSignRes.Signature,
 		}
-	}
-	if len(authMap) > 0 {
 		userOp.EIP7702Auth = authMap
+	}
+	stateOverride, err := p.userOperationEstimateStateOverride(wallet.Address, delegator, alreadyDelegated)
+	if err != nil {
+		return nil, err
+	}
+	gasEstimate, err := bundlerClient.estimateUserOperationGas(ctx, userOp, entryPoint, stateOverride)
+	if err != nil {
+		return nil, wrapSystemError(err)
+	}
+	if strings.TrimSpace(gasEstimate.CallGasLimit) != "" {
+		userOp.CallGasLimit = gasEstimate.CallGasLimit
+	}
+	if strings.TrimSpace(gasEstimate.VerificationGasLimit) == "" || strings.TrimSpace(gasEstimate.PreVerificationGas) == "" {
+		return nil, newAppError(models.CodeSystemBusy, "bundler estimateUserOperationGas returned incomplete gas fields")
+	}
+	userOp.VerificationGasLimit = gasEstimate.VerificationGasLimit
+	userOp.PreVerificationGas = gasEstimate.PreVerificationGas
+	if strings.TrimSpace(gasEstimate.PaymasterVerificationGasLimit) != "" {
+		userOp.PaymasterVerificationGasLimit = gasEstimate.PaymasterVerificationGasLimit
+	}
+	if strings.TrimSpace(gasEstimate.PaymasterPostOpGasLimit) != "" {
+		userOp.PaymasterPostOpGasLimit = gasEstimate.PaymasterPostOpGasLimit
 	}
 	typedData, err := buildUserOperationTypedData(chainID, entryPoint, userOp)
 	if err != nil {
