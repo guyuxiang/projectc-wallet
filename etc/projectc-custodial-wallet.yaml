@@ -40,7 +40,7 @@ connectors:
     rpcEndpoint: "https://sepolia.gateway.tenderly.co/2xRV8vQTDZE3KmbMjo4jCm"
     chainId: 11155111
     bundlerRpcEndpoint: "http://unblock-eth-bundler/rpc"
-    paymasterRpcEndpoint: "http://unblock-paymaster-service/rpc"
+    paymasterRpcEndpoint: "http://unblock-paymaster-svc/rpc"
     entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"
     enableEip7702: true
     eip7702Delegator: "0xe6Cae83BdE06E4c305530e199D7217f42808555B"
